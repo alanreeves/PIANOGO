@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f1d24">
   <meta name="description" content="Focused, progressive piano practice for small score ranges.">
-  <link rel="manifest" href="./manifest.webmanifest?v=0.3.3">
-  <link rel="icon" href="./assets/icon.svg?v=0.3.3" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.3.3">
-  <link rel="stylesheet" href="./styles.css?v=0.3.3">
+  <link rel="manifest" href="./manifest.webmanifest?v=0.4.0">
+  <link rel="icon" href="./assets/icon.svg?v=0.4.0" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.4.0">
+  <link rel="stylesheet" href="./styles.css?v=0.4.0">
   <title>PIANOGO</title>
 </head>
 <body>
@@ -124,10 +124,22 @@
         </div>
         <div class="score-actions">
           <button class="secondary-action" id="focus-stop" type="button" hidden>Stop</button>
+          <button class="secondary-action" id="calibrate-btn" type="button" hidden>📐 Calibrate Bars</button>
           <div class="zoom-controls" aria-label="Score zoom">
             <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
             <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
           </div>
+        </div>
+      </div>
+      <div id="calibration-toolbar" class="calibration-toolbar" hidden>
+        <span class="calib-hint" id="calib-hint">Click start of system, then click each barline.</span>
+        <div class="calib-actions">
+          <button type="button" class="chip-btn" id="calib-undo-btn">↶ Undo</button>
+          <button type="button" class="chip-btn" id="calib-clear-btn">Clear</button>
+          <button type="button" class="chip-btn" id="calib-export-btn">Export .json</button>
+          <button type="button" class="chip-btn" id="calib-import-btn">Import .json</button>
+          <input type="file" id="calib-import-file" accept=".json,application/json" hidden>
+          <button type="button" class="primary-action-sm" id="calib-done-btn">Done</button>
         </div>
       </div>
       <div id="score-viewport" class="score-viewport">
@@ -227,8 +239,8 @@
     </form>
   </dialog>
 
-  <script src="./vendor/pdf.min.js?v=0.3.3"></script>
-  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.3.3"></script>
-  <script type="module" src="./js/app.js?v=0.3.3"></script>
+  <script src="./vendor/pdf.min.js?v=0.4.0"></script>
+  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.4.0"></script>
+  <script type="module" src="./js/app.js?v=0.4.0"></script>
 </body>
 </html>

@@ -71,6 +71,64 @@ export async function convertPdfToMusicXml(file, settings, onProgress = () => {}
   };
 }
 
+export async function transcribeSnippet({ snippetDataUrl, startBar, endBar, timeSignature = "4/4", settings, onProgress = () => {} }) {
+  if (!settings.openaiApiKey?.trim()) {
+    throw new Error("Please enter your OpenAI API Key in Settings for AI piano audio playback.");
+  }
+
+  const model = settings.openaiModel?.trim() || "GPT-5.6 Luna";
+  const baseUrl = (settings.openaiBaseUrl?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const numBars = endBar - startBar + 1;
+
+  const prompt = `You are an expert MusicXML transcriber.
+Analyze this sheet music snippet containing exactly ${numBars} bar(s) (numbered Bars ${startBar} to ${endBar}).
+Time signature is ${timeSignature}.
+
+STRICT REQUIREMENTS:
+1. Generate valid, complete MusicXML 3.1 score-partwise XML for a two-staff piano part (Staff 1 = Treble, Staff 2 = Bass).
+2. Exactly ${numBars} measure(s) must be generated.
+3. Keep exact rhythm, pitches, accidentals, chords, and rests.
+4. Output ONLY the raw XML inside a \`\`\`xml code block.`;
+
+  onProgress(`AI transcribing Bars ${startBar}–${endBar} with ${model}…`);
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${settings.openaiApiKey.trim()}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: snippetDataUrl, detail: "high" } },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    let errorDetails = `HTTP error ${response.status}`;
+    try {
+      const errorJson = await response.json();
+      errorDetails = errorJson.error?.message || errorDetails;
+    } catch { }
+    throw new Error(`OpenAI API error: ${errorDetails}`);
+  }
+
+  const result = await response.json();
+  const rawText = result.choices?.[0]?.message?.content || "";
+  const xml = extractXml(rawText);
+
+  if (!xml) throw new Error("Could not extract MusicXML for snippet.");
+  return { xml, document: parseXml(xml) };
+}
+
 export function extractXml(text) {
   const match = text.match(/```(?:xml|musicxml)?\s*([\s\S]*?)```/i);
   if (match) {

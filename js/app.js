@@ -1,8 +1,10 @@
 import { APP_VERSION, DEFAULT_OMR_PROMPT, DEFAULT_SETTINGS } from "../config.js";
 import { AudioEngine } from "./audio/engine.js";
 import { readScoreFile, parseXml, transformClefs } from "./score/loader.js";
-import { convertPdfToMusicXml, downloadFile } from "./score/omr.js";
-import { buildTimeline, parseTimeSignature, selectRange } from "./score/timing.js";
+import { exportCalibrationFile, parseCalibrationJson } from "./score/pdf-calibration.js";
+import { PdfView } from "./score/pdf-view.js";
+import { convertPdfToMusicXml, downloadFile, transcribeSnippet } from "./score/omr.js";
+import { buildPdfTimeline, buildTimeline, parseTimeSignature, selectRange } from "./score/timing.js";
 import { ScoreView } from "./score/view.js";
 import { PracticeRunner } from "./session/runner.js";
 import { getLatestScore, getStats, saveScore, saveSession } from "./store/db.js";
@@ -18,6 +20,15 @@ const elements = {
   scoreStatus: document.querySelector("#score-status"),
   focusReadout: document.querySelector("#focus-readout"),
   focusStop: document.querySelector("#focus-stop"),
+  calibrateBtn: document.querySelector("#calibrate-btn"),
+  calibrationToolbar: document.querySelector("#calibration-toolbar"),
+  calibHint: document.querySelector("#calib-hint"),
+  calibUndoBtn: document.querySelector("#calib-undo-btn"),
+  calibClearBtn: document.querySelector("#calib-clear-btn"),
+  calibExportBtn: document.querySelector("#calib-export-btn"),
+  calibImportBtn: document.querySelector("#calib-import-btn"),
+  calibImportFile: document.querySelector("#calib-import-file"),
+  calibDoneBtn: document.querySelector("#calib-done-btn"),
   empty: document.querySelector("#score-empty"),
   form: document.querySelector("#practice-form"),
   startBar: document.querySelector("#start-bar"),
@@ -62,9 +73,18 @@ const view = new ScoreView({
   playhead: document.querySelector("#score-playhead"),
   emptyState: elements.empty,
 });
+
+const pdfView = new PdfView({
+  host: document.querySelector("#score"),
+  viewport: document.querySelector("#score-viewport"),
+  stage: document.querySelector("#score-stage"),
+  playhead: document.querySelector("#score-playhead"),
+});
+
 const audio = new AudioEngine();
 let currentScore = null;
 let currentTimeline = null;
+let activeScoreType = "xml"; // "xml" | "pdf"
 let pendingSession = null;
 let lastConvertedFile = null;
 let focusActive = false;
@@ -77,7 +97,13 @@ const runner = new PracticeRunner(audio, {
     elements.sessionRepetition.textContent = `Repetition ${repetition} of ${repetitions}`;
     updateFocusReadout(repetition, repetitions, tempo);
   },
-  onCursor: (quarter, range) => view.setPlayhead(quarter, range),
+  onCursor: (quarter, range) => {
+    if (activeScoreType === "pdf") {
+      pdfView.setPlayhead(quarter, range);
+    } else {
+      view.setPlayhead(quarter, range);
+    }
+  },
   onStop: () => {
     exitFocusMode();
     setIdleState("Practice stopped.");
@@ -113,15 +139,16 @@ function exitFocusMode() {
   elements.practicePanel.hidden = false;
   elements.focusReadout.hidden = true;
   elements.focusStop.hidden = true;
-  view.showFullScore();
+  if (activeScoreType === "xml") view.showFullScore();
 }
 
 function setIdleState(message = "Ready to practise.") {
-  elements.start.disabled = !currentTimeline;
+  elements.start.disabled = !currentTimeline || (activeScoreType === "pdf" && !currentTimeline.measures.length);
   elements.stop.disabled = true;
   elements.sessionTempo.textContent = "Ready";
   elements.sessionRepetition.textContent = "—";
-  view.clearPlayhead();
+  if (activeScoreType === "pdf") pdfView.clearPlayhead();
+  else view.clearPlayhead();
   setStatus(message);
 }
 
@@ -181,7 +208,7 @@ async function setClef(type, value) {
   if (type === "lower") lowerClef = value;
   updateClefButtons();
   saveSettings();
-  if (!currentScore || !currentTimeline) return;
+  if (activeScoreType !== "xml" || !currentScore || !currentTimeline) return;
   const transformedXml = transformClefs(currentScore.xml, { upper: upperClef, lower: lowerClef });
   await view.load(transformedXml, currentTimeline.measures.length, true);
   const startBar = Number(elements.startBar.value) || 1;
@@ -194,26 +221,55 @@ async function loadScore(file) {
   elements.start.disabled = true;
 
   if (file.name.toLowerCase().endsWith(".pdf")) {
-    const settings = readSettings();
-    if (!settings.openaiApiKey) {
-      elements.settingsDialog.showModal();
-      throw new Error("Please enter your OpenAI API Key in Settings to transcribe PDF sheet music.");
-    }
-    const converted = await convertPdfToMusicXml(file, settings, (status) => setStatus(status));
-    lastConvertedFile = converted;
-    downloadFile(converted.filename, converted.xml);
-    elements.convertedSummary.textContent = `"${converted.title}" converted successfully from PDF and downloaded as ${converted.filename}.`;
-    elements.convertedDialog.showModal();
-    await openScore({
-      id: `ai-${Date.now()}-${converted.filename}`,
-      name: converted.filename,
-      xml: converted.xml,
-      title: converted.title,
-    }, true);
+    const bytes = await file.arrayBuffer();
+    const title = file.name.replace(/\.pdf$/i, "");
+    const score = {
+      id: `pdf-${file.name}`,
+      name: file.name,
+      title,
+      type: "pdf",
+      pdfBytes: bytes,
+      calibration: { bars: [], timeSignature: elements.signature.value || "4/4" },
+    };
+    await openPdfScore(score, true);
     return;
   }
 
   await openScore(await readScoreFile(file), true);
+}
+
+async function openPdfScore(score, persist) {
+  activeScoreType = "pdf";
+  elements.empty.hidden = true;
+  elements.calibrateBtn.hidden = false;
+  elements.calibrationToolbar.hidden = true;
+
+  await pdfView.loadPdf(score.pdfBytes, score.calibration);
+  if (persist) await saveScore(score);
+  currentScore = score;
+
+  elements.scoreName.textContent = score.title;
+  const barsCount = score.calibration?.bars?.length || 0;
+
+  if (barsCount > 0) {
+    currentTimeline = buildPdfTimeline(score.calibration, elements.signature.value);
+    elements.startBar.disabled = false;
+    elements.endBar.disabled = false;
+    elements.startBar.max = barsCount;
+    elements.endBar.max = barsCount;
+    elements.startBar.value = 1;
+    elements.endBar.value = Math.min(barsCount, 4);
+    elements.sessionBars.textContent = `Bars 1–${elements.endBar.value}`;
+    pdfView.showRange(1, elements.endBar.value);
+    await refreshStats();
+    setIdleState(`${score.title} · ${barsCount} bars · ${currentTimeline.timeSignature}`);
+  } else {
+    currentTimeline = buildPdfTimeline({ bars: [] }, elements.signature.value);
+    elements.startBar.disabled = true;
+    elements.endBar.disabled = true;
+    elements.start.disabled = true;
+    setStatus("PDF score loaded. Click '📐 Calibrate Bars' to mark the barlines line-by-line.");
+  }
 }
 
 async function restoreLatestScore() {
@@ -221,10 +277,18 @@ async function restoreLatestScore() {
   if (!score) return;
   setStatus("Restoring saved score…");
   elements.start.disabled = true;
-  await openScore(score, false);
+  if (score.type === "pdf" && score.pdfBytes) {
+    await openPdfScore(score, false);
+  } else if (score.xml) {
+    await openScore(score, false);
+  }
 }
 
 async function openScore(score, persist) {
+  activeScoreType = "xml";
+  elements.calibrateBtn.hidden = true;
+  elements.calibrationToolbar.hidden = true;
+
   const document = parseXml(score.xml);
   const timeline = buildTimeline(document);
   if (!timeline.measures.length) throw new Error("This score has no playable measures.");
@@ -247,6 +311,43 @@ async function openScore(score, persist) {
   setIdleState(`${score.title} · ${timeline.measures.length} bars · ${timeline.timeSignature}`);
 }
 
+function startCalibrationMode() {
+  if (activeScoreType !== "pdf") return;
+  elements.calibrationToolbar.hidden = false;
+  elements.calibrateBtn.hidden = true;
+  elements.start.disabled = true;
+  elements.calibHint.textContent = `Click start of staff line, then click each barline (${pdfView.calibration.bars.length} bars marked)`;
+
+  pdfView.startCalibration((updatedCalibration) => {
+    elements.calibHint.textContent = `Click start of staff line, then click each barline (${updatedCalibration.bars.length} bars marked)`;
+  });
+}
+
+async function finishCalibrationMode() {
+  const calib = pdfView.finishCalibration();
+  elements.calibrationToolbar.hidden = true;
+  elements.calibrateBtn.hidden = false;
+
+  currentScore.calibration = calib;
+  await saveScore(currentScore);
+
+  const barsCount = calib.bars.length;
+  if (barsCount > 0) {
+    currentTimeline = buildPdfTimeline(calib, elements.signature.value);
+    elements.startBar.disabled = false;
+    elements.endBar.disabled = false;
+    elements.startBar.max = barsCount;
+    elements.endBar.max = barsCount;
+    elements.startBar.value = 1;
+    elements.endBar.value = Math.min(barsCount, 4);
+    elements.sessionBars.textContent = `Bars 1–${elements.endBar.value}`;
+    pdfView.showRange(1, elements.endBar.value);
+    setIdleState(`Calibration saved! ${barsCount} bars ready to practise.`);
+  } else {
+    setIdleState("No bars calibrated yet. Click '📐 Calibrate Bars' to mark measures.");
+  }
+}
+
 function rangeFromControls() {
   const startBar = Number(elements.startBar.value);
   const endBar = Number(elements.endBar.value);
@@ -258,16 +359,59 @@ async function startPractice() {
   if (!currentScore || !currentTimeline) return;
   const settings = readSettings();
   if (!Number.isInteger(settings.tempoIncrement) || settings.tempoIncrement < 1 || settings.tempoIncrement > 250) throw new Error("Tempo increase must be an integer from 1 to 250.");
-  const range = rangeFromControls();
+  const startBar = Number(elements.startBar.value);
+  const endBar = Number(elements.endBar.value);
+  let range = rangeFromControls();
   const signature = parseTimeSignature(settings.countInSignature, currentTimeline.timeSignature);
-  elements.sessionBars.textContent = `Bars ${elements.startBar.value}–${elements.endBar.value}`;
+  elements.sessionBars.textContent = `Bars ${startBar}–${endBar}`;
   elements.start.disabled = true;
   elements.stop.disabled = false;
+
+  // For PDF mode: On-demand AI snippet transcription if piano sound is enabled and API key is set
+  if (activeScoreType === "pdf" && settings.pianoSound && settings.openaiApiKey) {
+    const cacheKey = `pianogo-snippet-${currentScore.id}-${startBar}-${endBar}`;
+    let cachedEvents = JSON.parse(localStorage.getItem(cacheKey) || "null");
+
+    if (!cachedEvents) {
+      const snippetDataUrl = pdfView.getCropDataUrl(startBar, endBar);
+      if (snippetDataUrl) {
+        setStatus(`AI transcribing Bars ${startBar}–${endBar} snippet…`);
+        try {
+          const result = await transcribeSnippet({
+            snippetDataUrl,
+            startBar,
+            endBar,
+            timeSignature: currentTimeline.timeSignature,
+            settings,
+            onProgress: (msg) => setStatus(msg),
+          });
+          const snippetTimeline = buildTimeline(result.document);
+          cachedEvents = snippetTimeline.events;
+          localStorage.setItem(cacheKey, JSON.stringify(cachedEvents));
+        } catch (err) {
+          console.warn("Snippet AI transcription failed, falling back to metronome:", err);
+          setStatus(`Notice: ${err.message} (Practising with metronome)`);
+        }
+      }
+    }
+
+    if (cachedEvents?.length) {
+      range = {
+        ...range,
+        events: cachedEvents.map((e) => ({ ...e, onset: e.onset % range.duration })),
+      };
+    }
+  }
+
   setStatus(settings.pianoSound && !audio.pianoSamplesReady ? "Loading grand piano samples…" : `Preparing a ${signature.label} count-in…`);
   try {
     await audio.unlock({ pianoSound: settings.pianoSound });
     setStatus(`Preparing a ${signature.label} count-in…`);
-    view.showRange(Number(elements.startBar.value), Number(elements.endBar.value));
+    if (activeScoreType === "pdf") {
+      pdfView.showRange(startBar, endBar);
+    } else {
+      view.showRange(startBar, endBar);
+    }
     enterFocusMode();
     await runner.start({ ...settings, ...signature, range });
   } catch (error) {
@@ -295,7 +439,6 @@ function completeSession(summary) {
 
 async function recordSession(cleanRuns) {
   if (!pendingSession || !currentScore) return;
-  const range = rangeFromControls();
   const settings = readSettings();
   await saveSession({
     scoreId: currentScore.id,
@@ -327,6 +470,33 @@ if ("serviceWorker" in navigator) {
 
 elements.settingsBtn.addEventListener("click", () => elements.settingsDialog.showModal());
 elements.settingsClose.addEventListener("click", () => elements.settingsDialog.close());
+
+elements.calibrateBtn?.addEventListener("click", () => startCalibrationMode());
+elements.calibUndoBtn?.addEventListener("click", () => pdfView.undoBar());
+elements.calibClearBtn?.addEventListener("click", () => pdfView.clearBars());
+elements.calibDoneBtn?.addEventListener("click", () => finishCalibrationMode().catch(showError));
+
+elements.calibExportBtn?.addEventListener("click", () => {
+  if (pdfView.calibration) {
+    exportCalibrationFile(pdfView.calibration, `${currentScore?.title || "score"}.pianogo.json`);
+  }
+});
+
+elements.calibImportBtn?.addEventListener("click", () => elements.calibImportFile.click());
+elements.calibImportFile?.addEventListener("change", async () => {
+  const [file] = elements.calibImportFile.files;
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const imported = parseCalibrationJson(text);
+    pdfView.calibration = imported;
+    pdfView.renderBarOverlays();
+    elements.calibImportFile.value = "";
+    elements.calibHint.textContent = `Imported ${imported.bars.length} bars from JSON file.`;
+  } catch (err) {
+    showError(new Error("Could not parse calibration JSON file."));
+  }
+});
 
 elements.toggleKeyBtn?.addEventListener("click", () => {
   const isPassword = elements.settingApiKey.type === "password";
@@ -404,8 +574,15 @@ elements.focusStop.addEventListener("click", () => runner.stop());
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && focusActive) runner.stop();
 });
-document.querySelector("#zoom-in").addEventListener("click", () => view.zoomBy(0.15));
-document.querySelector("#zoom-out").addEventListener("click", () => view.zoomBy(-0.15));
+
+document.querySelector("#zoom-in").addEventListener("click", () => {
+  if (activeScoreType === "pdf") pdfView.zoomBy(0.15);
+  else view.zoomBy(0.15);
+});
+document.querySelector("#zoom-out").addEventListener("click", () => {
+  if (activeScoreType === "pdf") pdfView.zoomBy(-0.15);
+  else view.zoomBy(-0.15);
+});
 
 document.querySelectorAll(".btn-toggle[data-clef]").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -415,7 +592,10 @@ document.querySelectorAll(".btn-toggle[data-clef]").forEach((btn) => {
 
 [elements.startBar, elements.endBar].forEach((input) => input.addEventListener("input", () => {
   if (!currentTimeline) return;
+  const start = Number(elements.startBar.value) || 1;
+  const end = Number(elements.endBar.value) || start;
   elements.sessionBars.textContent = `Bars ${elements.startBar.value}–${elements.endBar.value}`;
+  if (activeScoreType === "pdf") pdfView.showRange(start, end);
 }));
 
 elements.cleanForm.addEventListener("submit", (event) => {

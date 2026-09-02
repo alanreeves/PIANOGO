@@ -156,6 +156,12 @@ body.focus-mode .score-toolbar { padding-top: calc(15px + env(safe-area-inset-to
 .text-link-btn { border: 0; background: transparent; color: #0e625d; font-size: .72rem; font-weight: 700; text-decoration: underline; padding: 0; }
 .text-link-btn:hover { color: #073a37; }
 
+.calibration-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 8px 16px; background: #e0ece8; border-bottom: 1px solid #c9d8d4; }
+.calib-hint { color: #0e5b56; font-size: .74rem; font-weight: 700; }
+.calib-actions { display: flex; align-items: center; gap: 6px; }
+.primary-action-sm { min-height: 28px; padding: 3px 10px; border: 0; border-radius: 6px; background: #0e625d; color: #fff; font-size: .74rem; font-weight: 800; }
+.primary-action-sm:hover { background: #084844; }
+
 .converted-dialog { width: min(440px, calc(100% - 32px)); }
 .converted-content { padding: 22px; display: grid; gap: 10px; }
 .converted-content p:not(.eyebrow) { color: #647479; font-size: .88rem; line-height: 1.4; }
