@@ -229,9 +229,30 @@ dd { margin: 1px 0 0; color: #173d3d; font-size: .88rem; font-weight: 800; font-
   background: #d9e0de;
   touch-action: pan-y;
 }
-.score-stage { position: relative; min-width: 100%; min-height: 100%; padding: clamp(10px, 2vw, 24px); }
-.score { min-width: max-content; transform-origin: top left; }
-.score svg { display: block; max-width: none; background: #fffdf8; box-shadow: 0 6px 20px rgba(20, 40, 40, .10); }
+.score-stage {
+  position: relative;
+  width: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  padding: clamp(10px, 2vw, 24px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.score {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: top center;
+}
+.score svg {
+  display: block;
+  max-width: 100%;
+  background: #fffdf8;
+  box-shadow: 0 6px 20px rgba(20, 40, 40, .10);
+  border-radius: 4px;
+}
 .score-playhead {
   position: absolute;
   top: 0;

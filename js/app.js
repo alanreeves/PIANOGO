@@ -83,6 +83,7 @@ function exitFocusMode() {
   elements.focusStop.hidden = true;
   elements.practicePanel.hidden = false;
   elements.header.hidden = false;
+  view.showFullScore();
 }
 
 function updateFocusReadout(repetition, total, tempo) {
@@ -149,9 +150,13 @@ async function setClef(type, value) {
   if (!currentScore || !currentTimeline) return;
   const transformedXml = transformClefs(currentScore.xml, { upper: upperClef, lower: lowerClef });
   await view.load(transformedXml, currentTimeline.measures.length, true);
-  const startBar = Number(elements.startBar.value) || 1;
-  const endBar = Number(elements.endBar.value) || currentTimeline.measures.length;
-  view.showRange(startBar, endBar);
+  if (focusActive) {
+    const startBar = Number(elements.startBar.value) || 1;
+    const endBar = Number(elements.endBar.value) || currentTimeline.measures.length;
+    view.showRange(startBar, endBar);
+  } else {
+    view.showFullScore();
+  }
 }
 
 async function loadScore(file) {
@@ -186,7 +191,7 @@ async function openScore(score, persist) {
   elements.endBar.value = Math.min(timeline.measures.length, 4);
   elements.sessionBars.textContent = `Bars 1–${elements.endBar.value}`;
   elements.signature.value = timeline.timeSignature;
-  view.showRange(1, elements.endBar.value);
+  view.showFullScore();
   await refreshStats();
   setIdleState(`${score.title} · ${timeline.measures.length} bars · ${timeline.timeSignature}`);
 }
@@ -211,8 +216,8 @@ async function startPractice() {
   try {
     await audio.unlock({ pianoSound: settings.pianoSound });
     setStatus(`Preparing a ${signature.label} count-in…`);
-    view.showRange(Number(elements.startBar.value), Number(elements.endBar.value));
     enterFocusMode();
+    view.showRange(Number(elements.startBar.value), Number(elements.endBar.value));
     await runner.start({ ...settings, ...signature, range });
   } catch (error) {
     exitFocusMode();

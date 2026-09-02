@@ -24,6 +24,11 @@ export class ScoreView {
       drawingParameters: "default",
     });
     this.#attachZoomGestures();
+    window.addEventListener("resize", () => {
+      if (this.measureCount) {
+        this.osmd.render();
+      }
+    });
   }
 
   async load(xml, measureCount, preserveZoom = false) {
@@ -61,6 +66,7 @@ export class ScoreView {
       drawTitle: false,
       drawComposer: false,
     });
+    this.host.style.transform = "";
     this.osmd.render();
     this.clearPlayhead();
     this.lastCenteredMeasure = 0;
@@ -75,6 +81,7 @@ export class ScoreView {
       drawTitle: true,
       drawComposer: true,
     });
+    this.host.style.transform = "";
     this.osmd.render();
     this.clearPlayhead();
     this.lastCenteredMeasure = 0;
