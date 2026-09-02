@@ -66,7 +66,9 @@ export class PdfView {
       calibrationLayer.dataset.page = String(pageNum);
       calibrationLayer.style.position = "absolute";
       calibrationLayer.style.inset = "0";
+      calibrationLayer.style.zIndex = "4";
       calibrationLayer.style.pointerEvents = this.isCalibrating ? "auto" : "none";
+      calibrationLayer.style.cursor = this.isCalibrating ? "crosshair" : "default";
 
       pageContainer.appendChild(canvas);
       pageContainer.appendChild(calibrationLayer);
@@ -117,8 +119,15 @@ export class PdfView {
   }
 
   undoBar() {
+    if (this.lastClickX !== null && (!this.calibration.bars.length || this.calibration.bars.at(-1)?.systemIndex !== this.currentSystem?.index)) {
+      this.lastClickX = null;
+      this.currentSystem = null;
+      this.renderBarOverlays();
+      this.onCalibrationChange(`Cancelled pending staff start.`);
+      return;
+    }
     if (!this.calibration.bars.length) return;
-    this.calibration.bars.pop();
+    const removed = this.calibration.bars.pop();
     const lastBar = this.calibration.bars.at(-1);
     if (lastBar) {
       this.lastClickX = lastBar.x2;
@@ -128,7 +137,7 @@ export class PdfView {
       this.currentSystem = null;
     }
     this.renderBarOverlays();
-    this.onCalibrationChange(this.calibration);
+    this.onCalibrationChange(`Removed Bar ${removed.barNumber} (${this.calibration.bars.length} bars remaining).`);
   }
 
   clearBars() {
@@ -136,7 +145,7 @@ export class PdfView {
     this.currentSystem = null;
     this.lastClickX = null;
     this.renderBarOverlays();
-    this.onCalibrationChange(this.calibration);
+    this.onCalibrationChange(`All bars cleared. Click start of staff line to begin.`);
   }
 
   #attachPageClickHandler(pageView) {
@@ -151,15 +160,13 @@ export class PdfView {
   }
 
   #handleCalibrationClick(pageNum, x, y) {
-    const defaultStaffHeight = 70; // typical staff system pixel height
-    const systemYThreshold = 45; // If clicked vertically far or different page, new system
+    const defaultStaffHeight = 110; // grand staff height
+    const systemYThreshold = 85;
 
-    // If starting fresh or user clicked on a different page or different staff line
-    if (
-      !this.currentSystem ||
-      this.currentSystem.page !== pageNum ||
-      Math.abs(y - (this.currentSystem.top + this.currentSystem.bottom) / 2) > systemYThreshold
-    ) {
+    const systemCenter = this.currentSystem ? (this.currentSystem.top + this.currentSystem.bottom) / 2 : 0;
+    const isNewSystem = !this.currentSystem || this.currentSystem.page !== pageNum || Math.abs(y - systemCenter) > systemYThreshold;
+
+    if (isNewSystem) {
       const systemIndex = (this.calibration.bars.at(-1)?.systemIndex ?? -1) + 1;
       this.currentSystem = {
         page: pageNum,
@@ -168,12 +175,22 @@ export class PdfView {
         index: systemIndex,
       };
       this.lastClickX = x;
-      this.renderBarOverlays(x, y, pageNum);
+      this.renderBarOverlays();
+      if (this.onCalibrationChange) {
+        this.onCalibrationChange(`Staff line ${systemIndex + 1} start set. Click the first barline.`);
+      }
       return;
     }
 
-    // Subsequent click on same system: creates a bar from lastClickX to current x
-    if (x <= this.lastClickX + 15) return; // Prevent accidental duplicate tiny clicks
+    if (x <= this.lastClickX + 10) {
+      // Re-adjust start point on same staff
+      this.lastClickX = x;
+      this.renderBarOverlays();
+      if (this.onCalibrationChange) {
+        this.onCalibrationChange(`Start adjusted to X=${Math.round(x)}. Now click the next barline.`);
+      }
+      return;
+    }
 
     const barNumber = this.calibration.bars.length + 1;
     this.calibration.bars.push({
@@ -188,10 +205,12 @@ export class PdfView {
 
     this.lastClickX = x;
     this.renderBarOverlays();
-    this.onCalibrationChange(this.calibration);
+    if (this.onCalibrationChange) {
+      this.onCalibrationChange(`Bar ${barNumber} marked (${this.calibration.bars.length} total). Click next barline or next staff.`);
+    }
   }
 
-  renderBarOverlays(activeStartLineX = null, activeStartLineY = null, activePage = null) {
+  renderBarOverlays() {
     this.pageViews.forEach(({ calibrationLayer }) => {
       if (calibrationLayer) calibrationLayer.innerHTML = "";
     });
@@ -205,28 +224,30 @@ export class PdfView {
       barEl.className = "pdf-bar-overlay";
       barEl.dataset.bar = String(bar.barNumber);
       barEl.style.position = "absolute";
-      barEl.style.left = `${bar.x1}px`;
-      barEl.style.top = `${bar.y1}px`;
-      barEl.style.width = `${bar.x2 - bar.x1}px`;
-      barEl.style.height = `${bar.y2 - bar.y1}px`;
-      barEl.style.border = "1px dashed rgba(16, 118, 110, .4)";
-      barEl.style.borderRight = "2px solid #10766e";
-      barEl.style.background = "rgba(16, 118, 110, .05)";
+      barEl.style.left = `${Math.round(bar.x1 * this.zoom)}px`;
+      barEl.style.top = `${Math.round(bar.y1 * this.zoom)}px`;
+      barEl.style.width = `${Math.round((bar.x2 - bar.x1) * this.zoom)}px`;
+      barEl.style.height = `${Math.round((bar.y2 - bar.y1) * this.zoom)}px`;
+      barEl.style.border = "1px dashed rgba(16, 118, 110, .5)";
+      barEl.style.borderRight = "3px solid #10766e";
+      barEl.style.background = "rgba(16, 118, 110, .08)";
       barEl.style.pointerEvents = "none";
+      barEl.style.boxSizing = "border-box";
 
       const badge = document.createElement("span");
       badge.className = "pdf-bar-badge";
       badge.textContent = bar.barNumber;
       badge.style.position = "absolute";
-      badge.style.top = "-8px";
+      badge.style.top = "-9px";
       badge.style.left = "4px";
       badge.style.background = "#0e625d";
       badge.style.color = "#fff";
-      badge.style.fontSize = "10px";
+      badge.style.fontSize = "11px";
       badge.style.fontWeight = "800";
-      badge.style.padding = "1px 5px";
+      badge.style.padding = "1px 6px";
       badge.style.borderRadius = "4px";
-      badge.style.boxShadow = "0 1px 3px rgba(0,0,0,.2)";
+      badge.style.boxShadow = "0 1px 3px rgba(0,0,0,.25)";
+      badge.style.pointerEvents = "none";
 
       barEl.appendChild(badge);
       pageView.calibrationLayer.appendChild(barEl);
@@ -239,13 +260,28 @@ export class PdfView {
         const activeLine = document.createElement("div");
         activeLine.className = "pdf-active-barline";
         activeLine.style.position = "absolute";
-        activeLine.style.left = `${this.lastClickX}px`;
-        activeLine.style.top = `${this.currentSystem.top}px`;
-        activeLine.style.width = "2px";
-        activeLine.style.height = `${this.currentSystem.bottom - this.currentSystem.top}px`;
+        activeLine.style.left = `${Math.round(this.lastClickX * this.zoom)}px`;
+        activeLine.style.top = `${Math.round(this.currentSystem.top * this.zoom)}px`;
+        activeLine.style.width = "3px";
+        activeLine.style.height = `${Math.round((this.currentSystem.bottom - this.currentSystem.top) * this.zoom)}px`;
         activeLine.style.background = "#e85436";
-        activeLine.style.boxShadow = "0 0 8px rgba(232, 84, 54, .8)";
+        activeLine.style.boxShadow = "0 0 10px rgba(232, 84, 54, .9)";
         activeLine.style.pointerEvents = "none";
+
+        const startBadge = document.createElement("span");
+        startBadge.textContent = "Start";
+        startBadge.style.position = "absolute";
+        startBadge.style.top = "-16px";
+        startBadge.style.left = "-8px";
+        startBadge.style.background = "#e85436";
+        startBadge.style.color = "#fff";
+        startBadge.style.fontSize = "9px";
+        startBadge.style.fontWeight = "800";
+        startBadge.style.padding = "1px 4px";
+        startBadge.style.borderRadius = "3px";
+        startBadge.style.pointerEvents = "none";
+        activeLine.appendChild(startBadge);
+
         activePageView.calibrationLayer.appendChild(activeLine);
       }
     }
@@ -258,8 +294,8 @@ export class PdfView {
       overlays.forEach((el) => {
         const barNum = Number(el.dataset.bar);
         const inRange = barNum >= startBar && barNum <= endBar;
-        el.style.background = inRange ? "rgba(232, 84, 54, .12)" : "rgba(16, 118, 110, .05)";
-        el.style.borderColor = inRange ? "#e85436" : "rgba(16, 118, 110, .4)";
+        el.style.background = inRange ? "rgba(232, 84, 54, .14)" : "rgba(16, 118, 110, .08)";
+        el.style.borderColor = inRange ? "#e85436" : "rgba(16, 118, 110, .5)";
       });
     });
 
@@ -313,17 +349,16 @@ export class PdfView {
       const scaledH = Math.round(pageView.baseH * this.zoom);
       pageView.container.style.width = `${scaledW}px`;
       pageView.container.style.height = `${scaledH}px`;
-      pageView.container.style.transformOrigin = "top left";
       pageView.canvas.style.width = `${scaledW}px`;
       pageView.canvas.style.height = `${scaledH}px`;
 
       if (pageView.calibrationLayer) {
-        pageView.calibrationLayer.style.transform = `scale(${this.zoom})`;
-        pageView.calibrationLayer.style.transformOrigin = "top left";
-        pageView.calibrationLayer.style.width = `${pageView.baseW}px`;
-        pageView.calibrationLayer.style.height = `${pageView.baseH}px`;
+        pageView.calibrationLayer.style.width = `${scaledW}px`;
+        pageView.calibrationLayer.style.height = `${scaledH}px`;
+        pageView.calibrationLayer.style.transform = "";
       }
     });
+    this.renderBarOverlays();
   }
 
   getCropDataUrl(startBar, endBar) {

@@ -320,8 +320,12 @@ function startCalibrationMode() {
   if (elements.transcribeRangeBtn) elements.transcribeRangeBtn.hidden = true;
   elements.calibHint.textContent = `Click start of staff line, then click each barline (${pdfView.calibration.bars.length} bars marked)`;
 
-  pdfView.startCalibration((updatedCalibration) => {
-    elements.calibHint.textContent = `Click start of staff line, then click each barline (${updatedCalibration.bars.length} bars marked)`;
+  pdfView.startCalibration((info) => {
+    if (typeof info === "string") {
+      elements.calibHint.textContent = info;
+    } else {
+      elements.calibHint.textContent = `Click start of staff line, then click each barline (${info?.bars?.length ?? 0} bars marked)`;
+    }
   });
 }
 
