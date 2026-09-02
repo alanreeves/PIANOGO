@@ -19,7 +19,8 @@ export class PdfView {
     if (!window.pdfjsLib) throw new Error("PDF renderer is not loaded.");
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.js";
 
-    const loadingTask = window.pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
+    const dataCopy = bytes instanceof ArrayBuffer ? bytes.slice(0) : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const loadingTask = window.pdfjsLib.getDocument({ data: new Uint8Array(dataCopy) });
     this.pdfDoc = await loadingTask.promise;
     this.calibration = calibration || { bars: [], timeSignature: "4/4" };
     await this.renderAllPages();

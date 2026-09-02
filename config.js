@@ -1,4 +1,4 @@
-export const APP_VERSION = "0.5.0";
+export const APP_VERSION = "0.5.1";
 
 export const DEFAULT_OMR_PROMPT = `You are an expert MusicXML transcriber.
 Analyze the provided sheet music snippet image containing the specified bars.

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.5.0";
+const APP_VERSION = "0.5.1";
 const CACHE_NAME = `pianogo-${APP_VERSION}`;
 const APP_SHELL = [
   "./",
