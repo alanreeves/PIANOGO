@@ -1,6 +1,6 @@
 import { APP_VERSION, DEFAULT_SETTINGS } from "../config.js";
 import { AudioEngine } from "./audio/engine.js";
-import { readScoreFile, parseXml } from "./score/loader.js";
+import { readScoreFile, parseXml, transformClefs } from "./score/loader.js";
 import { buildTimeline, parseTimeSignature, selectRange } from "./score/timing.js";
 import { ScoreView } from "./score/view.js";
 import { PracticeRunner } from "./session/runner.js";
@@ -49,6 +49,8 @@ let currentScore = null;
 let currentTimeline = null;
 let pendingSession = null;
 let focusActive = false;
+let upperClef = "auto";
+let lowerClef = "auto";
 
 const runner = new PracticeRunner(audio, {
   onCycleStart: ({ repetition, repetitions, tempo }) => {
@@ -104,6 +106,15 @@ function setIdleState(message = "Ready to practise.") {
   setStatus(message);
 }
 
+function updateClefButtons() {
+  document.querySelectorAll("[data-clef='upper']").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.value === upperClef);
+  });
+  document.querySelectorAll("[data-clef='lower']").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.value === lowerClef);
+  });
+}
+
 function readSettings() {
   return {
     startTempo: Number(elements.startTempo.value),
@@ -112,6 +123,8 @@ function readSettings() {
     hands: elements.hands.value,
     countInSignature: elements.signature.value,
     pianoSound: elements.sound.checked,
+    upperClef,
+    lowerClef,
   };
 }
 
@@ -127,6 +140,22 @@ function restoreSettings() {
   elements.hands.value = saved.hands;
   elements.signature.value = saved.countInSignature;
   elements.sound.checked = saved.pianoSound;
+  upperClef = saved.upperClef || "auto";
+  lowerClef = saved.lowerClef || "auto";
+  updateClefButtons();
+}
+
+async function setClef(type, value) {
+  if (type === "upper") upperClef = value;
+  if (type === "lower") lowerClef = value;
+  updateClefButtons();
+  saveSettings();
+  if (!currentScore || !currentTimeline) return;
+  const transformedXml = transformClefs(currentScore.xml, { upper: upperClef, lower: lowerClef });
+  await view.load(transformedXml, currentTimeline.measures.length, true);
+  const startBar = Number(elements.startBar.value) || 1;
+  const endBar = Number(elements.endBar.value) || currentTimeline.measures.length;
+  view.showRange(startBar, endBar);
 }
 
 async function loadScore(file) {
@@ -147,7 +176,8 @@ async function openScore(score, persist) {
   const document = parseXml(score.xml);
   const timeline = buildTimeline(document);
   if (!timeline.measures.length) throw new Error("This score has no playable measures.");
-  await view.load(score.xml, timeline.measures.length);
+  const transformedXml = transformClefs(score.xml, { upper: upperClef, lower: lowerClef });
+  await view.load(transformedXml, timeline.measures.length);
   if (persist) await saveScore(score);
   currentScore = score;
   currentTimeline = timeline;
@@ -160,6 +190,7 @@ async function openScore(score, persist) {
   elements.endBar.value = Math.min(timeline.measures.length, 4);
   elements.sessionBars.textContent = `Bars 1–${elements.endBar.value}`;
   elements.signature.value = timeline.timeSignature;
+  view.showRange(1, elements.endBar.value);
   await refreshStats();
   setIdleState(`${score.title} · ${timeline.measures.length} bars · ${timeline.timeSignature}`);
 }
@@ -264,6 +295,12 @@ document.addEventListener("keydown", (event) => {
 });
 document.querySelector("#zoom-in").addEventListener("click", () => view.zoomBy(0.15));
 document.querySelector("#zoom-out").addEventListener("click", () => view.zoomBy(-0.15));
+
+document.querySelectorAll(".btn-toggle[data-clef]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    setClef(btn.dataset.clef, btn.dataset.value).catch(showError);
+  });
+});
 
 [elements.startBar, elements.endBar].forEach((input) => input.addEventListener("input", () => {
   if (!currentTimeline) return;

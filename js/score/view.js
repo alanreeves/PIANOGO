@@ -24,11 +24,13 @@ export class ScoreView {
     this.#attachZoomGestures();
   }
 
-  async load(xml, measureCount) {
+  async load(xml, measureCount, preserveZoom = false) {
     this.measureCount = measureCount;
-    this.visibleStart = 1;
-    this.visibleEnd = measureCount;
-    this.zoom = 1;
+    if (!preserveZoom) {
+      this.visibleStart = 1;
+      this.visibleEnd = measureCount;
+      this.zoom = 1;
+    }
     this.host.style.transform = "";
     await this.osmd.load(xml);
     this.osmd.zoom = this.zoom;

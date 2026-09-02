@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f1d24">
   <meta name="description" content="Focused, progressive piano practice for small score ranges.">
-  <link rel="manifest" href="./manifest.webmanifest?v=0.2.3">
-  <link rel="icon" href="./assets/icon.svg?v=0.2.3" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.2.3">
-  <link rel="stylesheet" href="./styles.css?v=0.2.3">
+  <link rel="manifest" href="./manifest.webmanifest?v=0.2.4">
+  <link rel="icon" href="./assets/icon.svg?v=0.2.4" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.2.4">
+  <link rel="stylesheet" href="./styles.css?v=0.2.4">
   <title>PIANOGO</title>
 </head>
 <body>
@@ -64,6 +64,28 @@
           <p class="helper" id="signature-help">Use auto or enter a value such as 4/4 or 6/8.</p>
           <label class="toggle"><input id="piano-sound" name="pianoSound" type="checkbox" checked><span>Play piano sound</span></label>
           <p class="helper">Steinway samples: <a href="./assets/piano/LICENSE.txt">Salamander Grand Piano</a> by Alexander Holm, CC BY 3.0.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Clef display</legend>
+          <div class="clef-control-row">
+            <div class="clef-group">
+              <span class="field-label">Upper staff</span>
+              <div class="btn-group" role="radiogroup" aria-label="Upper staff clef">
+                <button type="button" class="btn-toggle active" data-clef="upper" data-value="auto">Auto</button>
+                <button type="button" class="btn-toggle" data-clef="upper" data-value="treble">𝄞 Treble</button>
+                <button type="button" class="btn-toggle" data-clef="upper" data-value="bass">𝄢 Bass</button>
+              </div>
+            </div>
+            <div class="clef-group">
+              <span class="field-label">Lower staff</span>
+              <div class="btn-group" role="radiogroup" aria-label="Lower staff clef">
+                <button type="button" class="btn-toggle active" data-clef="lower" data-value="auto">Auto</button>
+                <button type="button" class="btn-toggle" data-clef="lower" data-value="bass">𝄢 Bass</button>
+                <button type="button" class="btn-toggle" data-clef="lower" data-value="treble">𝄞 Treble</button>
+              </div>
+            </div>
+          </div>
         </fieldset>
 
         <div class="session-readout" aria-live="polite">
@@ -132,7 +154,7 @@
     </form>
   </dialog>
 
-  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.2.3"></script>
-  <script type="module" src="./js/app.js?v=0.2.3"></script>
+  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.2.4"></script>
+  <script type="module" src="./js/app.js?v=0.2.4"></script>
 </body>
 </html>

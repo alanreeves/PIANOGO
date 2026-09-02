@@ -24,6 +24,72 @@ export function parseXml(xml) {
   return document;
 }
 
+export function transformClefs(xml, { upper = "auto", lower = "auto" } = {}) {
+  if (upper === "auto" && lower === "auto") return xml;
+  const document = parseXml(xml);
+  const part = document.querySelector("part");
+  if (!part) return xml;
+
+  const measures = [...part.children].filter((element) => element.localName === "measure");
+  measures.forEach((measure, index) => {
+    let attributes = [...measure.children].find((child) => child.localName === "attributes");
+    if (!attributes && index === 0) {
+      attributes = document.createElement("attributes");
+      measure.insertBefore(attributes, measure.firstChild);
+    }
+    if (attributes) {
+      const clefs = [...attributes.children].filter((child) => child.localName === "clef");
+      clefs.forEach((clef) => {
+        const staffNum = Number(clef.getAttribute("number") || "1") || 1;
+        const target = staffNum === 1 ? upper : staffNum === 2 ? lower : "auto";
+        if (target === "treble") {
+          applyClef(clef, "G", "2");
+        } else if (target === "bass") {
+          applyClef(clef, "F", "4");
+        }
+      });
+
+      if (index === 0) {
+        if (upper !== "auto" && !clefs.some((c) => (Number(c.getAttribute("number") || "1") || 1) === 1)) {
+          const newClef = document.createElement("clef");
+          newClef.setAttribute("number", "1");
+          applyClef(newClef, upper === "treble" ? "G" : "F", upper === "treble" ? "2" : "4");
+          attributes.appendChild(newClef);
+        }
+        const stavesEl = [...attributes.children].find((child) => child.localName === "staves");
+        const stavesCount = Number(stavesEl?.textContent?.trim() || "1") || 1;
+        if (lower !== "auto" && stavesCount >= 2 && !clefs.some((c) => Number(c.getAttribute("number")) === 2)) {
+          const newClef = document.createElement("clef");
+          newClef.setAttribute("number", "2");
+          applyClef(newClef, lower === "treble" ? "G" : "F", lower === "treble" ? "2" : "4");
+          attributes.appendChild(newClef);
+        }
+      }
+    }
+  });
+
+  return new XMLSerializer().serializeToString(document);
+}
+
+function applyClef(clefElement, sign, line) {
+  let signEl = [...clefElement.children].find((child) => child.localName === "sign");
+  if (!signEl) {
+    signEl = clefElement.ownerDocument.createElement("sign");
+    clefElement.appendChild(signEl);
+  }
+  signEl.textContent = sign;
+
+  let lineEl = [...clefElement.children].find((child) => child.localName === "line");
+  if (!lineEl) {
+    lineEl = clefElement.ownerDocument.createElement("line");
+    clefElement.appendChild(lineEl);
+  }
+  lineEl.textContent = line;
+
+  const octaveEl = [...clefElement.children].find((child) => child.localName === "clef-octave-change");
+  if (octaveEl) octaveEl.remove();
+}
+
 function getMetadata(document, filename) {
   const title = textAt(document, "work-title") || textAt(document, "movement-title") || filename.replace(/\.[^.]+$/, "");
   const part = document.querySelector("part");
