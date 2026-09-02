@@ -1,4 +1,4 @@
-const APP_VERSION = "0.1.3";
+const APP_VERSION = "0.2.1";
 const CACHE_NAME = `pianogo-${APP_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -8,6 +8,7 @@ const APP_SHELL = [
   "./config.js",
   "./js/app.js",
   "./js/audio/engine.js",
+  "./js/audio/piano.js",
   "./js/score/loader.js",
   "./js/score/timing.js",
   "./js/score/view.js",
@@ -16,6 +17,7 @@ const APP_SHELL = [
   "./js/ui/stats.js",
   "./vendor/opensheetmusicdisplay.min.js",
   "./assets/icon.svg",
+  "./assets/piano/LICENSE.txt",
 ];
 
 self.addEventListener("install", (event) => {

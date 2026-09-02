@@ -8,10 +8,14 @@ import { getLatestScore, getStats, saveScore, saveSession } from "./store/db.js"
 import { renderStats } from "./ui/stats.js";
 
 const elements = {
+  header: document.querySelector(".app-header"),
+  practicePanel: document.querySelector(".practice-panel"),
   version: document.querySelector("#app-version"),
   file: document.querySelector("#score-file"),
   scoreName: document.querySelector("#score-name"),
   scoreStatus: document.querySelector("#score-status"),
+  focusReadout: document.querySelector("#focus-readout"),
+  focusStop: document.querySelector("#focus-stop"),
   empty: document.querySelector("#score-empty"),
   form: document.querySelector("#practice-form"),
   startBar: document.querySelector("#start-bar"),
@@ -44,19 +48,51 @@ const audio = new AudioEngine();
 let currentScore = null;
 let currentTimeline = null;
 let pendingSession = null;
+let focusActive = false;
 
 const runner = new PracticeRunner(audio, {
   onCycleStart: ({ repetition, repetitions, tempo }) => {
     elements.sessionTempo.textContent = `${tempo} BPM`;
     elements.sessionRepetition.textContent = `Repetition ${repetition} of ${repetitions}`;
+    updateFocusReadout(repetition, repetitions, tempo);
   },
-  onCursor: (event, range) => view.setPlayhead(event, range),
-  onStop: () => setIdleState("Practice stopped."),
+  onCursor: (quarter, range) => view.setPlayhead(quarter, range),
+  onStop: () => {
+    exitFocusMode();
+    setIdleState("Practice stopped.");
+  },
   onComplete: (summary) => completeSession(summary),
 });
 
 function setStatus(message) {
   elements.scoreStatus.textContent = message;
+}
+
+function updateFocusReadout(repetition = 0, repetitions = 0, tempo = Number(elements.startTempo.value)) {
+  const progress = repetitions ? ` · Repetition ${repetition} of ${repetitions}` : "";
+  elements.focusReadout.textContent = `Bars ${elements.startBar.value}–${elements.endBar.value} · ${tempo} BPM${progress}`;
+}
+
+function enterFocusMode() {
+  focusActive = true;
+  document.body.classList.add("focus-mode");
+  elements.header.hidden = true;
+  elements.practicePanel.hidden = true;
+  elements.focusReadout.hidden = false;
+  elements.focusStop.hidden = false;
+  updateFocusReadout();
+  elements.focusStop.focus();
+}
+
+function exitFocusMode() {
+  if (!focusActive) return;
+  focusActive = false;
+  document.body.classList.remove("focus-mode");
+  elements.header.hidden = false;
+  elements.practicePanel.hidden = false;
+  elements.focusReadout.hidden = true;
+  elements.focusStop.hidden = true;
+  view.showFullScore();
 }
 
 function setIdleState(message = "Ready to practise.") {
@@ -144,8 +180,17 @@ async function startPractice() {
   elements.sessionBars.textContent = `Bars ${elements.startBar.value}–${elements.endBar.value}`;
   elements.start.disabled = true;
   elements.stop.disabled = false;
-  setStatus(`Preparing a ${signature.label} count-in…`);
-  await runner.start({ ...settings, ...signature, range });
+  setStatus(settings.pianoSound && !audio.pianoSamplesReady ? "Loading grand piano samples…" : `Preparing a ${signature.label} count-in…`);
+  try {
+    await audio.unlock({ pianoSound: settings.pianoSound });
+    setStatus(`Preparing a ${signature.label} count-in…`);
+    view.showRange(Number(elements.startBar.value), Number(elements.endBar.value));
+    enterFocusMode();
+    await runner.start({ ...settings, ...signature, range });
+  } catch (error) {
+    exitFocusMode();
+    throw error;
+  }
 }
 
 async function refreshStats() {
@@ -153,6 +198,7 @@ async function refreshStats() {
 }
 
 function completeSession(summary) {
+  exitFocusMode();
   elements.stop.disabled = true;
   elements.sessionTempo.textContent = `${summary.finalTempo} BPM`;
   elements.sessionRepetition.textContent = `${summary.repetitions} repetitions complete`;
@@ -184,6 +230,7 @@ async function recordSession(cleanRuns) {
 }
 
 function showError(error) {
+  exitFocusMode();
   setIdleState(error instanceof Error ? error.message : "Something went wrong while preparing the score.");
 }
 
@@ -211,6 +258,10 @@ elements.form.addEventListener("submit", (event) => {
   startPractice().catch(showError);
 });
 elements.stop.addEventListener("click", () => runner.stop());
+elements.focusStop.addEventListener("click", () => runner.stop());
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && focusActive) runner.stop();
+});
 document.querySelector("#zoom-in").addEventListener("click", () => view.zoomBy(0.15));
 document.querySelector("#zoom-out").addEventListener("click", () => view.zoomBy(-0.15));
 

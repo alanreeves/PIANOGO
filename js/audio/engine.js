@@ -1,3 +1,5 @@
+import { PianoSampler } from "./piano.js";
+
 const PARTIALS = [
   { ratio: 1, gain: 0.18, type: "sine" },
   { ratio: 2, gain: 0.08, type: "triangle" },
@@ -8,17 +10,31 @@ export class AudioEngine {
   constructor() {
     this.context = null;
     this.master = null;
+    this.piano = null;
     this.activeOscillators = new Set();
   }
 
-  async unlock() {
+  async unlock({ pianoSound = true } = {}) {
     if (!this.context) {
       this.context = new AudioContext();
       this.master = this.context.createGain();
       this.master.gain.value = 0.8;
       this.master.connect(this.context.destination);
+      const bus = this.context.createDynamicsCompressor();
+      bus.threshold.value = -10;
+      bus.knee.value = 26;
+      bus.ratio.value = 4;
+      bus.attack.value = 0.005;
+      bus.release.value = 0.2;
+      bus.connect(this.master);
+      this.piano = new PianoSampler(this.context, bus);
     }
     if (this.context.state !== "running") await this.context.resume();
+    if (pianoSound) await this.piano.load();
+  }
+
+  get pianoSamplesReady() {
+    return Boolean(this.piano?.ready);
   }
 
   get now() {
@@ -35,7 +51,7 @@ export class AudioEngine {
     if (pianoSound) {
       events
         .filter((event) => hands === "both" || (hands === "left" ? event.staff > 1 : event.staff === 1))
-        .forEach((event) => this.#schedulePiano(event.midi, start + countInDuration + event.onset * secondsPerQuarter, event.duration * secondsPerQuarter));
+        .forEach((event) => this.#playNote(event.midi, start + countInDuration + event.onset * secondsPerQuarter, event.duration * secondsPerQuarter));
     }
     return {
       countInStart: start,
@@ -47,6 +63,7 @@ export class AudioEngine {
 
   stop() {
     const now = this.now;
+    this.piano?.stop(now);
     this.activeOscillators.forEach((oscillator) => {
       try { oscillator.stop(now); } catch { }
     });
@@ -65,7 +82,15 @@ export class AudioEngine {
     this.#track(oscillator, time, time + 0.08);
   }
 
-  #schedulePiano(midi, time, duration) {
+  #playNote(midi, time, duration) {
+    if (this.piano?.ready) {
+      this.piano.play(midi, time, duration);
+      return;
+    }
+    this.#scheduleSynth(midi, time, duration);
+  }
+
+  #scheduleSynth(midi, time, duration) {
     const frequency = 440 * 2 ** ((midi - 69) / 12);
     PARTIALS.forEach((partial) => {
       const oscillator = this.context.createOscillator();

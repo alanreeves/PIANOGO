@@ -61,6 +61,7 @@ label { display: grid; gap: 5px; color: #314147; font-size: .78rem; font-weight:
 input:not([type="checkbox"]), select { width: 100%; min-height: 42px; padding: 8px 9px; border: 1px solid #cbd5d3; border-radius: 9px; outline-color: #10766e; background: #fff; color: #172128; }
 input:focus, select:focus { border-color: #10766e; box-shadow: 0 0 0 3px rgba(16, 118, 110, .15); }
 .helper { margin-top: -5px; }
+.helper a { color: #0e625d; }
 .toggle { grid-auto-flow: column; justify-content: start; align-items: center; gap: 9px; min-height: 25px; }
 .toggle input { inline-size: 18px; block-size: 18px; accent-color: #10766e; }
 
@@ -83,15 +84,21 @@ dd { margin: 3px 0 0; color: #173d3d; font-size: 1.12rem; font-weight: 800; font
 
 .score-panel { display: flex; min-height: 650px; flex-direction: column; overflow: hidden; }
 .score-toolbar { display: flex; min-height: 76px; align-items: center; justify-content: space-between; gap: 15px; padding: 15px 18px; border-bottom: 1px solid #dae1df; }
-.score-status { margin-top: 4px; color: #637277; font-size: .82rem; }
-.zoom-controls { display: flex; gap: 6px; }
+.score-status, .focus-readout { margin-top: 4px; color: #637277; font-size: .82rem; }
+.focus-readout { color: #0f4946; font-weight: 800; font-variant-numeric: tabular-nums; }
+.score-actions, .zoom-controls { display: flex; gap: 6px; }
 .zoom-controls button { min-width: 40px; padding: 0; background: #e6edea; color: #183e3e; font-size: 1.3rem; }
 .score-viewport { position: relative; flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; background: #d9e0de; touch-action: pan-y; }
 .score-stage { position: relative; min-width: 100%; min-height: 100%; padding: clamp(15px, 2vw, 36px); }
 .score { min-width: max-content; transform-origin: top left; }
 .score svg { display: block; max-width: none; background: #fffdf8; box-shadow: 0 8px 25px rgba(20, 40, 40, .12); }
-.score-playhead { position: absolute; z-index: 3; width: 3px; border-radius: 4px; background: #e85436; box-shadow: 0 0 0 2px rgba(255, 255, 255, .8), 0 0 15px rgba(232, 84, 54, .65); pointer-events: none; transition: transform 80ms linear, height 80ms linear; }
+.score-playhead { position: absolute; z-index: 3; width: 3px; border-radius: 4px; background: #e85436; box-shadow: 0 0 0 2px rgba(255, 255, 255, .8), 0 0 15px rgba(232, 84, 54, .65); pointer-events: none; will-change: transform; }
 .score-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; color: #6f8081; text-align: center; }
+
+body.focus-mode { overflow: hidden; }
+body.focus-mode .app-layout { display: block; max-width: none; min-height: 100dvh; margin: 0; padding: 0; }
+body.focus-mode .score-panel { position: fixed; inset: 0; z-index: 10; min-height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+body.focus-mode .score-toolbar { padding-top: calc(15px + env(safe-area-inset-top)); }
 .score-empty[hidden] { display: none; }
 .empty-mark { color: #cf9342; font-size: 3.4rem; line-height: 1; }
 

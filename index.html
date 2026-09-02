@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f1d24">
   <meta name="description" content="Focused, progressive piano practice for small score ranges.">
-  <link rel="manifest" href="./manifest.webmanifest?v=0.1.3">
-  <link rel="icon" href="./assets/icon.svg?v=0.1.3" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.1.3">
-  <link rel="stylesheet" href="./styles.css?v=0.1.3">
+  <link rel="manifest" href="./manifest.webmanifest?v=0.2.1">
+  <link rel="icon" href="./assets/icon.svg?v=0.2.1" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.2.1">
+  <link rel="stylesheet" href="./styles.css?v=0.2.1">
   <title>PIANOGO</title>
 </head>
 <body>
@@ -63,6 +63,7 @@
           </div>
           <p class="helper" id="signature-help">Use auto or enter a value such as 4/4 or 6/8.</p>
           <label class="toggle"><input id="piano-sound" name="pianoSound" type="checkbox" checked><span>Play piano sound</span></label>
+          <p class="helper">Steinway samples: <a href="./assets/piano/LICENSE.txt">Salamander Grand Piano</a> by Alexander Holm, CC BY 3.0.</p>
         </fieldset>
 
         <div class="session-readout" aria-live="polite">
@@ -95,10 +96,14 @@
         <div>
           <p class="eyebrow">Score view</p>
           <p id="score-status" class="score-status" role="status">Upload a MusicXML score to see it here.</p>
+          <p id="focus-readout" class="focus-readout" hidden></p>
         </div>
-        <div class="zoom-controls" aria-label="Score zoom">
-          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
-          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        <div class="score-actions">
+          <button class="secondary-action" id="focus-stop" type="button" hidden>Stop</button>
+          <div class="zoom-controls" aria-label="Score zoom">
+            <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+            <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+          </div>
         </div>
       </div>
       <div id="score-viewport" class="score-viewport">
@@ -127,7 +132,7 @@
     </form>
   </dialog>
 
-  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.1.3"></script>
-  <script type="module" src="./js/app.js?v=0.1.3"></script>
+  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.2.1"></script>
+  <script type="module" src="./js/app.js?v=0.2.1"></script>
 </body>
 </html>

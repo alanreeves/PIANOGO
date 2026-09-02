@@ -7,6 +7,8 @@ export class ScoreView {
     this.emptyState = emptyState;
     this.zoom = 1;
     this.measureCount = 0;
+    this.visibleStart = 1;
+    this.visibleEnd = 0;
     this.lastCenteredMeasure = 0;
     this.pointers = new Map();
     this.gesture = null;
@@ -24,6 +26,8 @@ export class ScoreView {
 
   async load(xml, measureCount) {
     this.measureCount = measureCount;
+    this.visibleStart = 1;
+    this.visibleEnd = measureCount;
     this.zoom = 1;
     this.host.style.transform = "";
     await this.osmd.load(xml);
@@ -31,6 +35,34 @@ export class ScoreView {
     this.osmd.render();
     this.emptyState.hidden = true;
     this.playhead.hidden = true;
+    this.lastCenteredMeasure = 0;
+  }
+
+  showRange(startBar, endBar) {
+    this.visibleStart = startBar;
+    this.visibleEnd = endBar;
+    this.osmd.setOptions({
+      drawFromMeasureNumber: startBar,
+      drawUpToMeasureNumber: endBar,
+      drawTitle: false,
+      drawComposer: false,
+    });
+    this.osmd.render();
+    this.clearPlayhead();
+    this.lastCenteredMeasure = 0;
+  }
+
+  showFullScore() {
+    this.visibleStart = 1;
+    this.visibleEnd = this.measureCount;
+    this.osmd.setOptions({
+      drawFromMeasureNumber: 1,
+      drawUpToMeasureNumber: this.measureCount,
+      drawTitle: true,
+      drawComposer: true,
+    });
+    this.osmd.render();
+    this.clearPlayhead();
     this.lastCenteredMeasure = 0;
   }
 
@@ -43,40 +75,54 @@ export class ScoreView {
     this.osmd.zoom = this.zoom;
     this.host.style.transform = "";
     this.osmd.render();
+    this.clearPlayhead();
+    this.lastCenteredMeasure = 0;
   }
 
   clearPlayhead() {
     this.playhead.hidden = true;
   }
 
-  setPlayhead(event, range) {
-    if (!event) return;
-    const measure = range.measures.find((candidate) => candidate.number === event.measure);
-    if (!measure) return;
-    const progress = Math.max(0, Math.min(1, (event.onset - measure.start + range.measures[0].start) / measure.duration));
-    const geometry = this.#measureGeometry(event.measure, progress);
+  setPlayhead(quarter, range) {
+    if (!range.measures.length) return;
+    const absoluteQuarter = range.measures[0].start + quarter;
+    const measure = range.measures.find((candidate) => absoluteQuarter < candidate.end) || range.measures.at(-1);
+    const progress = Math.max(0, Math.min(1, (absoluteQuarter - measure.start) / measure.duration));
+    const geometry = this.#measureGeometry(measure.number, progress);
     this.playhead.hidden = false;
     this.playhead.style.height = `${geometry.height}px`;
     this.playhead.style.transform = `translate(${geometry.x}px, ${geometry.y}px)`;
-    if (event.measure !== this.lastCenteredMeasure) {
-      this.lastCenteredMeasure = event.measure;
+    if (measure.number !== this.lastCenteredMeasure) {
+      this.lastCenteredMeasure = measure.number;
       this.#centerMeasure(geometry);
     }
   }
 
   #measureGeometry(measureNumber, progress) {
     const svg = this.host.querySelector("svg");
+    const visibleCount = Math.max(this.visibleEnd - this.visibleStart + 1, 1);
     const fallbackWidth = Math.max(120, this.host.clientWidth - 60);
-    const fallbackHeight = Math.max(120, this.host.scrollHeight / Math.max(this.measureCount, 1) - 12);
-    const fallbackY = ((measureNumber - 1) / Math.max(this.measureCount, 1)) * this.host.scrollHeight;
-    const graphicalMeasures = this.osmd.GraphicSheet?.MeasureList?.[measureNumber - 1];
-    const graphicalMeasure = Array.isArray(graphicalMeasures) ? graphicalMeasures.find((candidate) => candidate?.PositionAndShape) : null;
-    const position = graphicalMeasure?.PositionAndShape?.AbsolutePosition;
-    const size = graphicalMeasure?.PositionAndShape?.Size;
+    const fallbackHeight = Math.max(120, this.host.scrollHeight / visibleCount - 12);
+    const fallbackY = ((measureNumber - this.visibleStart) / visibleCount) * this.host.scrollHeight;
+    const graphicalMeasures = this.osmd.GraphicSheet?.MeasureList?.[measureNumber - this.visibleStart];
+    const shapes = Array.isArray(graphicalMeasures)
+      ? graphicalMeasures.map((candidate) => candidate?.PositionAndShape).filter(Boolean)
+      : [];
+    const firstShape = shapes[0];
+    const position = firstShape?.AbsolutePosition;
+    const size = firstShape?.Size;
     const x = Number(position?.x ?? position?.X);
-    const y = Number(position?.y ?? position?.Y);
     const width = Number(size?.width ?? size?.Width);
-    const height = Number(size?.height ?? size?.Height);
+    const staffBounds = shapes.map((shape) => {
+      const staffPosition = shape.AbsolutePosition;
+      const staffSize = shape.Size;
+      const y = Number(staffPosition?.y ?? staffPosition?.Y);
+      const height = Number(staffSize?.height ?? staffSize?.Height);
+      return { y, height };
+    }).filter(({ y, height }) => Number.isFinite(y) && Number.isFinite(height));
+    const y = Math.min(...staffBounds.map((bound) => bound.y));
+    const bottom = Math.max(...staffBounds.map((bound) => bound.y + bound.height));
+    const height = bottom - y;
     if (svg && [x, y, width, height].every(Number.isFinite)) {
       const viewBox = svg.viewBox.baseVal;
       const rect = svg.getBoundingClientRect();

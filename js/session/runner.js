@@ -9,9 +9,9 @@ export class PracticeRunner {
 
   async start(plan) {
     if (this.running) return;
-    await this.audio.unlock();
-    this.running = true;
     this.plan = plan;
+    await this.audio.unlock({ pianoSound: plan.pianoSound });
+    this.running = true;
     this.repetition = 1;
     this.tempo = plan.startTempo;
     this.startedAt = Date.now();
@@ -54,12 +54,8 @@ export class PracticeRunner {
   #animate(cycle) {
     const update = () => {
       if (!this.running) return;
-      const seconds = this.audio.now - cycle.scoreStart;
-      if (seconds >= 0 && seconds <= this.plan.range.duration * cycle.secondsPerQuarter) {
-        const quarter = seconds / cycle.secondsPerQuarter;
-        const event = this.plan.range.events.reduce((current, candidate) => candidate.onset <= quarter ? candidate : current, null);
-        this.callbacks.onCursor?.(event, this.plan.range);
-      }
+      const quarter = Math.max(0, Math.min(this.plan.range.duration, (this.audio.now - cycle.scoreStart) / cycle.secondsPerQuarter));
+      this.callbacks.onCursor?.(quarter, this.plan.range);
       this.frame = requestAnimationFrame(update);
     };
     cancelAnimationFrame(this.frame);

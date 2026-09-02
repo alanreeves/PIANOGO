@@ -1,0 +1,26 @@
+Salamander Grand Piano samples
+==============================
+
+The MP3 files in this directory are a subset of the "Salamander Grand Piano V3"
+sample library (Steinway Model D), recorded and released by Alexander Holm.
+
+Source: https://archive.org/details/SalamanderGrandPianoV3
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+          https://creativecommons.org/licenses/by/3.0/
+
+Required attribution: "Salamander Grand Piano" by Alexander Holm, licensed CC BY 3.0.
+
+Modifications made for this app:
+- 30 of the 88 pitches were kept (every minor third, MIDI 21 to 108).
+- The medium-soft layer (velocity 10) was used, converted to MP3 by the
+  `@audio-samples/piano-mp3-velocity10` package (MIT, Jan Forst,
+  https://github.com/darosh/samples-piano-mp3), which republishes the same
+  samples under the original CC BY 3.0 terms.
+- Each file was renamed to its MIDI note number, for example `A0v10.mp3`
+  became `21.mp3`.
+
+Notes not covered by a sample are played by pitching the nearest one up or down
+by at most one and a half semitones.
+
+The full CC BY 3.0 legal code is available at
+https://creativecommons.org/licenses/by/3.0/legalcode.
