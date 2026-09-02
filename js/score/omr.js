@@ -25,7 +25,6 @@ export async function convertPdfToMusicXml(file, settings, onProgress = () => {}
     },
     body: JSON.stringify({
       model,
-      temperature: 0.1,
       messages: [
         {
           role: "user",
