@@ -88,7 +88,8 @@ export class ScoreView {
     const absoluteQuarter = range.measures[0].start + quarter;
     const measure = range.measures.find((candidate) => absoluteQuarter < candidate.end) || range.measures.at(-1);
     const progress = Math.max(0, Math.min(1, (absoluteQuarter - measure.start) / measure.duration));
-    const geometry = this.#measureGeometry(measure.number, progress);
+    const geometry = this.#measureGeometry(absoluteQuarter, measure.number, progress);
+    if (!geometry) return;
     this.playhead.hidden = false;
     this.playhead.style.height = `${geometry.height}px`;
     this.playhead.style.transform = `translate(${geometry.x}px, ${geometry.y}px)`;
@@ -98,42 +99,67 @@ export class ScoreView {
     }
   }
 
-  #measureGeometry(measureNumber, progress) {
+  #measureGeometry(absoluteQuarter, measureNumber, progress) {
+    const scale = 10 * this.zoom;
     const svg = this.host.querySelector("svg");
+    const hostRect = this.host.getBoundingClientRect();
+    const svgRect = svg?.getBoundingClientRect();
+    const svgOffsetX = svgRect ? svgRect.left - hostRect.left : 0;
+    const svgOffsetY = svgRect ? svgRect.top - hostRect.top : 0;
+
+    if (this.osmd?.GraphicSheet?.calculateCursorLineAtTimestamp) {
+      const FractionClass = this.osmd.Sheet?.SourceMeasures?.[0]?.AbsoluteTimestamp?.constructor
+        || window.opensheetmusicdisplay?.Fraction;
+      const absoluteWhole = absoluteQuarter / 4.0;
+      const fraction = FractionClass?.createFromFloat
+        ? FractionClass.createFromFloat(absoluteWhole)
+        : FractionClass
+          ? new FractionClass(Math.round(absoluteWhole * 960), 960)
+          : { RealValue: absoluteWhole };
+
+      const line = this.osmd.GraphicSheet.calculateCursorLineAtTimestamp(fraction);
+      if (line?.Start && line?.End && Number.isFinite(line.Start.x) && Number.isFinite(line.Start.y)) {
+        const height = Math.max(line.End.y - line.Start.y, 4);
+        return {
+          x: this.host.offsetLeft + svgOffsetX + (line.Start.x * scale) - 1,
+          y: this.host.offsetTop + svgOffsetY + (line.Start.y * scale),
+          height: Math.max(30, height * scale),
+        };
+      }
+    }
+
+    const measureIndex = measureNumber - 1;
+    const graphicalMeasures = this.osmd?.GraphicSheet?.findGraphicalMeasuresForMeasureIndex?.(measureIndex)
+      || this.osmd?.GraphicSheet?.MeasureList?.[measureIndex]
+      || this.osmd?.GraphicSheet?.MeasureList?.[measureNumber - this.visibleStart];
+
+    if (Array.isArray(graphicalMeasures) && graphicalMeasures.length > 0) {
+      const firstMeasure = graphicalMeasures[0];
+      const system = firstMeasure?.ParentMusicSystem;
+      const staffLines = system?.StaffLines || [];
+      const systemY = system?.PositionAndShape?.AbsolutePosition?.y ?? firstMeasure?.PositionAndShape?.AbsolutePosition?.y;
+
+      if (Number.isFinite(systemY)) {
+        const topY = systemY + (staffLines[0]?.PositionAndShape?.RelativePosition?.y ?? 0);
+        const lastLine = staffLines[staffLines.length - 1];
+        const bottomY = systemY + (lastLine?.PositionAndShape?.RelativePosition?.y ?? 0) + (lastLine?.StaffHeight ?? 4);
+        const height = Math.max(bottomY - topY, 4);
+        const measureX = firstMeasure.PositionAndShape.AbsolutePosition.x;
+        const measureWidth = firstMeasure.PositionAndShape.Size.width;
+        const x = measureX + measureWidth * progress;
+
+        return {
+          x: this.host.offsetLeft + svgOffsetX + (x * scale) - 1,
+          y: this.host.offsetTop + svgOffsetY + (topY * scale),
+          height: Math.max(30, height * scale),
+        };
+      }
+    }
+
     const visibleCount = Math.max(this.visibleEnd - this.visibleStart + 1, 1);
     const fallbackWidth = Math.max(120, this.host.clientWidth - 60);
-    const fallbackHeight = Math.max(120, this.host.scrollHeight / visibleCount - 12);
+    const fallbackHeight = Math.max(60, this.host.scrollHeight / visibleCount - 12);
     const fallbackY = ((measureNumber - this.visibleStart) / visibleCount) * this.host.scrollHeight;
-    const graphicalMeasures = this.osmd.GraphicSheet?.MeasureList?.[measureNumber - this.visibleStart];
-    const shapes = Array.isArray(graphicalMeasures)
-      ? graphicalMeasures.map((candidate) => candidate?.PositionAndShape).filter(Boolean)
-      : [];
-    const firstShape = shapes[0];
-    const position = firstShape?.AbsolutePosition;
-    const size = firstShape?.Size;
-    const x = Number(position?.x ?? position?.X);
-    const width = Number(size?.width ?? size?.Width);
-    const staffBounds = shapes.map((shape) => {
-      const staffPosition = shape.AbsolutePosition;
-      const staffSize = shape.Size;
-      const y = Number(staffPosition?.y ?? staffPosition?.Y);
-      const height = Number(staffSize?.height ?? staffSize?.Height);
-      return { y, height };
-    }).filter(({ y, height }) => Number.isFinite(y) && Number.isFinite(height));
-    const y = Math.min(...staffBounds.map((bound) => bound.y));
-    const bottom = Math.max(...staffBounds.map((bound) => bound.y + bound.height));
-    const height = bottom - y;
-    if (svg && [x, y, width, height].every(Number.isFinite)) {
-      const viewBox = svg.viewBox.baseVal;
-      const rect = svg.getBoundingClientRect();
-      const scaleX = viewBox.width ? rect.width / viewBox.width : 1;
-      const scaleY = viewBox.height ? rect.height / viewBox.height : scaleX;
-      return {
-        x: this.host.offsetLeft + (x * 10 + width * 10 * progress) * scaleX,
-        y: this.host.offsetTop + y * 10 * scaleY,
-        height: Math.max(30, height * 10 * scaleY),
-      };
-    }
     return {
       x: this.host.offsetLeft + 20 + fallbackWidth * (0.04 + progress * 0.92),
       y: this.host.offsetTop + fallbackY,
