@@ -1,6 +1,7 @@
-import { APP_VERSION, DEFAULT_SETTINGS } from "../config.js";
+import { APP_VERSION, DEFAULT_OMR_PROMPT, DEFAULT_SETTINGS } from "../config.js";
 import { AudioEngine } from "./audio/engine.js";
 import { readScoreFile, parseXml, transformClefs } from "./score/loader.js";
+import { convertPdfToMusicXml, downloadFile } from "./score/omr.js";
 import { buildTimeline, parseTimeSignature, selectRange } from "./score/timing.js";
 import { ScoreView } from "./score/view.js";
 import { PracticeRunner } from "./session/runner.js";
@@ -11,6 +12,7 @@ const elements = {
   header: document.querySelector(".app-header"),
   practicePanel: document.querySelector(".practice-panel"),
   version: document.querySelector("#app-version"),
+  settingsBtn: document.querySelector("#settings-button"),
   file: document.querySelector("#score-file"),
   scoreName: document.querySelector("#score-name"),
   scoreStatus: document.querySelector("#score-status"),
@@ -35,6 +37,22 @@ const elements = {
   cleanForm: document.querySelector("#clean-form"),
   cleanRuns: document.querySelector("#clean-runs"),
   cleanSummary: document.querySelector("#clean-summary"),
+  settingsDialog: document.querySelector("#settings-dialog"),
+  settingsForm: document.querySelector("#settings-form"),
+  settingsClose: document.querySelector("#settings-close"),
+  settingApiKey: document.querySelector("#setting-openai-key"),
+  toggleKeyBtn: document.querySelector("#toggle-key-btn"),
+  settingModel: document.querySelector("#setting-openai-model"),
+  settingBaseUrl: document.querySelector("#setting-openai-base-url"),
+  settingPrompt: document.querySelector("#setting-omr-prompt"),
+  resetPromptBtn: document.querySelector("#reset-prompt-btn"),
+  exportSettingsBtn: document.querySelector("#export-settings-btn"),
+  importSettingsBtn: document.querySelector("#import-settings-btn"),
+  importSettingsFile: document.querySelector("#import-settings-file"),
+  convertedDialog: document.querySelector("#converted-dialog"),
+  convertedSummary: document.querySelector("#converted-summary"),
+  downloadConvertedBtn: document.querySelector("#download-converted-btn"),
+  closeConvertedBtn: document.querySelector("#close-converted-btn"),
 };
 
 const view = new ScoreView({
@@ -48,6 +66,7 @@ const audio = new AudioEngine();
 let currentScore = null;
 let currentTimeline = null;
 let pendingSession = null;
+let lastConvertedFile = null;
 let focusActive = false;
 let upperClef = "auto";
 let lowerClef = "auto";
@@ -125,6 +144,10 @@ function readSettings() {
     pianoSound: elements.sound.checked,
     upperClef,
     lowerClef,
+    openaiApiKey: elements.settingApiKey?.value?.trim() || "",
+    openaiModel: elements.settingModel?.value?.trim() || "GPT-5.6 Luna",
+    openaiBaseUrl: elements.settingBaseUrl?.value?.trim() || "https://api.openai.com/v1",
+    omrPrompt: elements.settingPrompt?.value?.trim() || DEFAULT_OMR_PROMPT,
   };
 }
 
@@ -132,17 +155,25 @@ function saveSettings() {
   localStorage.setItem("pianogo-settings", JSON.stringify(readSettings()));
 }
 
-function restoreSettings() {
-  const saved = JSON.parse(localStorage.getItem("pianogo-settings") || "null") || DEFAULT_SETTINGS;
-  elements.startTempo.value = saved.startTempo;
-  elements.increment.value = saved.tempoIncrement;
-  elements.repetitions.value = saved.repetitions;
-  elements.hands.value = saved.hands;
-  elements.signature.value = saved.countInSignature;
-  elements.sound.checked = saved.pianoSound;
+function applySettingsToForm(saved) {
+  elements.startTempo.value = saved.startTempo ?? DEFAULT_SETTINGS.startTempo;
+  elements.increment.value = saved.tempoIncrement ?? DEFAULT_SETTINGS.tempoIncrement;
+  elements.repetitions.value = saved.repetitions ?? DEFAULT_SETTINGS.repetitions;
+  elements.hands.value = saved.hands ?? DEFAULT_SETTINGS.hands;
+  elements.signature.value = saved.countInSignature ?? DEFAULT_SETTINGS.countInSignature;
+  elements.sound.checked = saved.pianoSound ?? DEFAULT_SETTINGS.pianoSound;
   upperClef = saved.upperClef || "auto";
   lowerClef = saved.lowerClef || "auto";
+  if (elements.settingApiKey) elements.settingApiKey.value = saved.openaiApiKey || "";
+  if (elements.settingModel) elements.settingModel.value = saved.openaiModel || DEFAULT_SETTINGS.openaiModel;
+  if (elements.settingBaseUrl) elements.settingBaseUrl.value = saved.openaiBaseUrl || DEFAULT_SETTINGS.openaiBaseUrl;
+  if (elements.settingPrompt) elements.settingPrompt.value = saved.omrPrompt || DEFAULT_OMR_PROMPT;
   updateClefButtons();
+}
+
+function restoreSettings() {
+  const saved = JSON.parse(localStorage.getItem("pianogo-settings") || "null") || DEFAULT_SETTINGS;
+  applySettingsToForm(saved);
 }
 
 async function setClef(type, value) {
@@ -161,6 +192,27 @@ async function setClef(type, value) {
 async function loadScore(file) {
   setStatus("Reading score…");
   elements.start.disabled = true;
+
+  if (file.name.toLowerCase().endsWith(".pdf")) {
+    const settings = readSettings();
+    if (!settings.openaiApiKey) {
+      elements.settingsDialog.showModal();
+      throw new Error("Please enter your OpenAI API Key in Settings to transcribe PDF sheet music.");
+    }
+    const converted = await convertPdfToMusicXml(file, settings, (status) => setStatus(status));
+    lastConvertedFile = converted;
+    downloadFile(converted.filename, converted.xml);
+    elements.convertedSummary.textContent = `"${converted.title}" converted successfully from PDF and downloaded as ${converted.filename}.`;
+    elements.convertedDialog.showModal();
+    await openScore({
+      id: `ai-${Date.now()}-${converted.filename}`,
+      name: converted.filename,
+      xml: converted.xml,
+      title: converted.title,
+    }, true);
+    return;
+  }
+
   await openScore(await readScoreFile(file), true);
 }
 
@@ -272,6 +324,65 @@ restoreLatestScore().catch(showError);
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).catch(() => {}));
 }
+
+elements.settingsBtn.addEventListener("click", () => elements.settingsDialog.showModal());
+elements.settingsClose.addEventListener("click", () => elements.settingsDialog.close());
+
+elements.toggleKeyBtn?.addEventListener("click", () => {
+  const isPassword = elements.settingApiKey.type === "password";
+  elements.settingApiKey.type = isPassword ? "text" : "password";
+  elements.toggleKeyBtn.textContent = isPassword ? "Hide" : "Show";
+});
+
+document.querySelectorAll(".chip-btn[data-model]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    elements.settingModel.value = btn.dataset.model;
+    saveSettings();
+  });
+});
+
+elements.resetPromptBtn?.addEventListener("click", () => {
+  elements.settingPrompt.value = DEFAULT_OMR_PROMPT;
+  saveSettings();
+});
+
+elements.exportSettingsBtn?.addEventListener("click", () => {
+  const data = JSON.stringify(readSettings(), null, 2);
+  downloadFile("pianogo-settings.json", data, "application/json");
+});
+
+elements.importSettingsBtn?.addEventListener("click", () => {
+  elements.importSettingsFile.click();
+});
+
+elements.importSettingsFile?.addEventListener("change", async () => {
+  const [file] = elements.importSettingsFile.files;
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const imported = JSON.parse(text);
+    applySettingsToForm(imported);
+    saveSettings();
+    elements.importSettingsFile.value = "";
+    setStatus("Settings loaded from JSON file.");
+  } catch {
+    showError(new Error("Could not parse the selected settings JSON file."));
+  }
+});
+
+elements.settingsForm.addEventListener("submit", () => {
+  saveSettings();
+});
+
+elements.downloadConvertedBtn?.addEventListener("click", () => {
+  if (lastConvertedFile) {
+    downloadFile(lastConvertedFile.filename, lastConvertedFile.xml);
+  }
+});
+
+elements.closeConvertedBtn?.addEventListener("click", () => {
+  elements.convertedDialog.close();
+});
 
 elements.file.addEventListener("change", async () => {
   const [file] = elements.file.files;
