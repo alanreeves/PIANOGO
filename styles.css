@@ -92,7 +92,7 @@ dd { margin: 3px 0 0; color: #173d3d; font-size: 1.12rem; font-weight: 800; font
 .score-stage { position: relative; min-width: 100%; min-height: 100%; padding: clamp(15px, 2vw, 36px); }
 .score { min-width: max-content; transform-origin: top left; }
 .score svg { display: block; max-width: none; background: #fffdf8; box-shadow: 0 8px 25px rgba(20, 40, 40, .12); }
-.score-playhead { position: absolute; z-index: 3; width: 3px; border-radius: 4px; background: #e85436; box-shadow: 0 0 0 2px rgba(255, 255, 255, .8), 0 0 15px rgba(232, 84, 54, .65); pointer-events: none; will-change: transform; }
+.score-playhead { position: absolute; top: 0; left: 0; z-index: 3; width: 3px; border-radius: 4px; background: #e85436; box-shadow: 0 0 0 2px rgba(255, 255, 255, .8), 0 0 15px rgba(232, 84, 54, .65); pointer-events: none; will-change: transform; }
 .score-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; color: #6f8081; text-align: center; }
 
 body.focus-mode { overflow: hidden; }

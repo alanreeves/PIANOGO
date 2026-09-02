@@ -101,11 +101,8 @@ export class ScoreView {
 
   #measureGeometry(absoluteQuarter, measureNumber, progress) {
     const scale = 10 * this.zoom;
-    const svg = this.host.querySelector("svg");
-    const hostRect = this.host.getBoundingClientRect();
-    const svgRect = svg?.getBoundingClientRect();
-    const svgOffsetX = svgRect ? svgRect.left - hostRect.left : 0;
-    const svgOffsetY = svgRect ? svgRect.top - hostRect.top : 0;
+    const hostLeft = this.host.offsetLeft;
+    const hostTop = this.host.offsetTop;
 
     if (this.osmd?.GraphicSheet?.calculateCursorLineAtTimestamp) {
       const FractionClass = this.osmd.Sheet?.SourceMeasures?.[0]?.AbsoluteTimestamp?.constructor
@@ -121,8 +118,8 @@ export class ScoreView {
       if (line?.Start && line?.End && Number.isFinite(line.Start.x) && Number.isFinite(line.Start.y)) {
         const height = Math.max(line.End.y - line.Start.y, 4);
         return {
-          x: this.host.offsetLeft + svgOffsetX + (line.Start.x * scale) - 1,
-          y: this.host.offsetTop + svgOffsetY + (line.Start.y * scale),
+          x: hostLeft + (line.Start.x * scale) - 1.5,
+          y: hostTop + (line.Start.y * scale),
           height: Math.max(30, height * scale),
         };
       }
@@ -149,8 +146,8 @@ export class ScoreView {
         const x = measureX + measureWidth * progress;
 
         return {
-          x: this.host.offsetLeft + svgOffsetX + (x * scale) - 1,
-          y: this.host.offsetTop + svgOffsetY + (topY * scale),
+          x: hostLeft + (x * scale) - 1.5,
+          y: hostTop + (topY * scale),
           height: Math.max(30, height * scale),
         };
       }
@@ -161,8 +158,8 @@ export class ScoreView {
     const fallbackHeight = Math.max(60, this.host.scrollHeight / visibleCount - 12);
     const fallbackY = ((measureNumber - this.visibleStart) / visibleCount) * this.host.scrollHeight;
     return {
-      x: this.host.offsetLeft + 20 + fallbackWidth * (0.04 + progress * 0.92),
-      y: this.host.offsetTop + fallbackY,
+      x: hostLeft + 20 + fallbackWidth * (0.04 + progress * 0.92),
+      y: hostTop + fallbackY,
       height: fallbackHeight,
     };
   }
