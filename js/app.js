@@ -48,20 +48,22 @@ const audio = new AudioEngine();
 let currentScore = null;
 let currentTimeline = null;
 let pendingSession = null;
+let focusActive = false;
 let upperClef = "auto";
 let lowerClef = "auto";
-let focusActive = false;
 
-const runner = new PracticeRunner({
-  audio,
-  onTick: ({ quarter, range }) => view.setPlayhead(quarter, range),
-  onRepetition: ({ repetition, total, tempo }) => {
+const runner = new PracticeRunner(audio, {
+  onCycleStart: ({ repetition, repetitions, tempo }) => {
     elements.sessionTempo.textContent = `${tempo} BPM`;
-    elements.sessionRepetition.textContent = `Run ${repetition} of ${total}`;
-    elements.focusReadout.textContent = `Run ${repetition}/${total} · ${tempo} BPM`;
+    elements.sessionRepetition.textContent = `Repetition ${repetition} of ${repetitions}`;
+    updateFocusReadout(repetition, repetitions, tempo);
+  },
+  onCursor: (quarter, range) => view.setPlayhead(quarter, range),
+  onStop: () => {
+    exitFocusMode();
+    setIdleState("Practice stopped.");
   },
   onComplete: (summary) => completeSession(summary),
-  onStop: () => setIdleState("Session stopped."),
 });
 
 function enterFocusMode() {
@@ -81,6 +83,10 @@ function exitFocusMode() {
   elements.focusStop.hidden = true;
   elements.practicePanel.hidden = false;
   elements.header.hidden = false;
+}
+
+function updateFocusReadout(repetition, total, tempo) {
+  elements.focusReadout.textContent = `Run ${repetition}/${total} · ${tempo} BPM`;
 }
 
 function setStatus(message) {
