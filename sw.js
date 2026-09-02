@@ -1,4 +1,4 @@
-const APP_VERSION = "0.6.3";
+const APP_VERSION = "0.6.4";
 const CACHE_NAME = `pianogo-${APP_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -21,7 +21,8 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
 });
 
 self.addEventListener("activate", (event) => {
@@ -34,9 +35,35 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
+  // Network-first for navigation so Safari/browser reload always fetches the latest index.html when online
   if (event.request.mode === "navigate") {
-    event.respondWith(caches.match("./index.html").then((response) => response || fetch(event.request)));
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match("./index.html")),
+    );
     return;
   }
-  event.respondWith(caches.match(event.request, { ignoreSearch: true }).then((response) => response || fetch(event.request)));
+
+  event.respondWith(
+    caches.match(event.request, { ignoreSearch: false }).then((cached) => {
+      if (cached) return cached;
+      return caches.match(event.request, { ignoreSearch: true }).then((fallback) => {
+        return fallback || fetch(event.request).then((response) => {
+          if (response && response.status === 200 && response.type === "basic") {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        });
+      });
+    }),
+  );
 });

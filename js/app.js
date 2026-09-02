@@ -266,7 +266,20 @@ restoreSettings();
 restoreLatestScore().catch(showError);
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).catch(() => {}));
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" });
+      reg.update();
+    } catch {}
+  });
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
 }
 
 elements.file.addEventListener("change", async () => {
