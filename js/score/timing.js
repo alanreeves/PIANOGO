@@ -84,27 +84,6 @@ export function buildTimeline(document) {
   return { events: events.sort((left, right) => left.onset - right.onset), measures, timeSignature };
 }
 
-export function buildPdfTimeline(calibration, timeSignature = "4/4") {
-  const [beats, unit] = (timeSignature || calibration.timeSignature || "4/4").split("/").map(Number);
-  const barDurationQuarters = beats * (4 / unit);
-  let scoreQuarter = 0;
-  const measures = [];
-  const events = [];
-
-  calibration.bars.forEach((bar, index) => {
-    const measureStart = scoreQuarter;
-    scoreQuarter += barDurationQuarters;
-    measures.push({
-      number: bar.barNumber || (index + 1),
-      start: measureStart,
-      duration: barDurationQuarters,
-      end: scoreQuarter,
-    });
-  });
-
-  return { events, measures, timeSignature: `${beats}/${unit}` };
-}
-
 export function selectRange(timeline, startBar, endBar) {
   const selectedMeasures = timeline.measures.slice(startBar - 1, endBar);
   if (!selectedMeasures.length) throw new Error("Choose a valid bar range.");

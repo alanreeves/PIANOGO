@@ -1,4 +1,4 @@
-const APP_VERSION = "0.5.4";
+const APP_VERSION = "0.6.0";
 const CACHE_NAME = `pianogo-${APP_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -12,15 +12,10 @@ const APP_SHELL = [
   "./js/score/loader.js",
   "./js/score/timing.js",
   "./js/score/view.js",
-  "./js/score/pdf-calibration.js",
-  "./js/score/pdf-view.js",
-  "./js/score/omr.js",
   "./js/session/runner.js",
   "./js/store/db.js",
   "./js/ui/stats.js",
   "./vendor/opensheetmusicdisplay.min.js",
-  "./vendor/pdf.min.js",
-  "./vendor/pdf.worker.min.js",
   "./assets/icon.svg",
   "./assets/piano/LICENSE.txt",
 ];

@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f1d24">
   <meta name="description" content="Focused, progressive piano practice for small score ranges.">
-  <link rel="manifest" href="./manifest.webmanifest?v=0.5.4">
-  <link rel="icon" href="./assets/icon.svg?v=0.5.4" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.5.4">
-  <link rel="stylesheet" href="./styles.css?v=0.5.4">
+  <link rel="manifest" href="./manifest.webmanifest?v=0.6.0">
+  <link rel="icon" href="./assets/icon.svg?v=0.6.0" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.6.0">
+  <link rel="stylesheet" href="./styles.css?v=0.6.0">
   <title>PIANOGO</title>
 </head>
 <body>
@@ -17,20 +17,17 @@
       <p class="eyebrow">Focused piano practice</p>
       <h1>PIANOGO</h1>
     </div>
-    <div class="header-actions">
-      <button type="button" class="settings-trigger" id="settings-button" aria-label="Open settings">⚙ Settings</button>
-      <span class="version" id="app-version"></span>
-    </div>
+    <span class="version" id="app-version"></span>
   </header>
 
   <main class="app-layout">
     <section class="practice-panel" aria-label="Practice controls">
       <div class="upload-card">
         <label class="upload-label" for="score-file">
-          <span>Upload a score</span>
-          <small>.musicxml, .xml, .mxl, or .pdf</small>
+          <span>Upload a MusicXML score</span>
+          <small>.musicxml, .xml, or .mxl</small>
         </label>
-        <input id="score-file" type="file" accept=".musicxml,.xml,.mxl,.pdf,application/pdf,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml">
+        <input id="score-file" type="file" accept=".musicxml,.xml,.mxl,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml">
         <p class="score-name" id="score-name">Choose a score to begin.</p>
       </div>
 
@@ -41,7 +38,6 @@
             <label>Start bar<input id="start-bar" name="startBar" type="number" min="1" value="1" disabled></label>
             <label>End bar<input id="end-bar" name="endBar" type="number" min="1" value="1" disabled></label>
           </div>
-          <button type="button" class="chip-btn-wide" id="transcribe-range-btn" hidden>✨ Transcribe Bars (AI)</button>
         </fieldset>
 
         <fieldset class="compact-fieldset">
@@ -120,27 +116,15 @@
       <div class="score-toolbar">
         <div>
           <p class="eyebrow">Score view</p>
-          <p id="score-status" class="score-status" role="status">Upload a score to see it here.</p>
+          <p id="score-status" class="score-status" role="status">Upload a MusicXML score to see it here.</p>
           <p id="focus-readout" class="focus-readout" hidden></p>
         </div>
         <div class="score-actions">
           <button class="secondary-action" id="focus-stop" type="button" hidden>Stop</button>
-          <button class="secondary-action" id="calibrate-btn" type="button" hidden>📐 Calibrate Bars</button>
           <div class="zoom-controls" aria-label="Score zoom">
             <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
             <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
           </div>
-        </div>
-      </div>
-      <div id="calibration-toolbar" class="calibration-toolbar" hidden>
-        <span class="calib-hint" id="calib-hint">Click start of system, then click each barline.</span>
-        <div class="calib-actions">
-          <button type="button" class="chip-btn" id="calib-undo-btn">↶ Undo</button>
-          <button type="button" class="chip-btn" id="calib-clear-btn">Clear</button>
-          <button type="button" class="chip-btn" id="calib-export-btn">Export .json</button>
-          <button type="button" class="chip-btn" id="calib-import-btn">Import .json</button>
-          <input type="file" id="calib-import-file" accept=".json,application/json" hidden>
-          <button type="button" class="primary-action-sm" id="calib-done-btn">Done</button>
         </div>
       </div>
       <div id="score-viewport" class="score-viewport">
@@ -156,65 +140,6 @@
     </section>
   </main>
 
-  <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
-    <form id="settings-form" method="dialog">
-      <div class="dialog-header">
-        <div>
-          <p class="eyebrow">Preferences</p>
-          <h2 id="settings-title">App & AI Settings</h2>
-        </div>
-        <button type="button" class="dialog-close" id="settings-close" aria-label="Close settings">×</button>
-      </div>
-
-      <div class="dialog-scroll">
-        <fieldset>
-          <legend>OpenAI API Configuration</legend>
-          <label>API Key
-            <div class="input-with-action">
-              <input id="setting-openai-key" type="password" placeholder="sk-..." autocomplete="off">
-              <button type="button" class="inline-btn" id="toggle-key-btn" aria-label="Show or hide API key">Show</button>
-            </div>
-          </label>
-          <label>Model Name
-            <input id="setting-openai-model" type="text" value="GPT-5.6 Luna" placeholder="GPT-5.6 Luna">
-          </label>
-          <div class="model-chips" aria-label="Model suggestions">
-            <span class="helper">Quick select:</span>
-            <button type="button" class="chip-btn" data-model="GPT-5.6 Luna">GPT-5.6 Luna</button>
-            <button type="button" class="chip-btn" data-model="gpt-4o">gpt-4o</button>
-            <button type="button" class="chip-btn" data-model="gpt-4o-mini">gpt-4o-mini</button>
-            <button type="button" class="chip-btn" data-model="o1">o1</button>
-          </div>
-          <label>API Base URL
-            <input id="setting-openai-base-url" type="text" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
-          </label>
-        </fieldset>
-
-        <fieldset>
-          <div class="legend-header">
-            <legend>AI Snippet Transcription Prompt</legend>
-            <button type="button" class="text-link-btn" id="reset-prompt-btn">Reset to default</button>
-          </div>
-          <textarea id="setting-omr-prompt" rows="9" spellcheck="false"></textarea>
-        </fieldset>
-
-        <fieldset>
-          <legend>Backup & Restore Settings</legend>
-          <p class="helper">Save all your practice preferences, API keys, and custom prompts to a local JSON file or reload them anytime.</p>
-          <div class="action-row">
-            <button type="button" class="secondary-action" id="export-settings-btn">Export Settings JSON</button>
-            <button type="button" class="secondary-action" id="import-settings-btn">Import Settings JSON</button>
-            <input type="file" id="import-settings-file" accept=".json,application/json" hidden>
-          </div>
-        </fieldset>
-      </div>
-
-      <div class="dialog-footer">
-        <button class="primary-action" type="submit" value="save">Save & Close</button>
-      </div>
-    </form>
-  </dialog>
-
   <dialog id="clean-dialog" class="clean-dialog" aria-labelledby="clean-title">
     <form id="clean-form" method="dialog">
       <p class="eyebrow">Session complete</p>
@@ -228,8 +153,7 @@
     </form>
   </dialog>
 
-  <script src="./vendor/pdf.min.js?v=0.5.4"></script>
-  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.5.4"></script>
-  <script type="module" src="./js/app.js?v=0.5.4"></script>
+  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.6.0"></script>
+  <script type="module" src="./js/app.js?v=0.6.0"></script>
 </body>
 </html>
