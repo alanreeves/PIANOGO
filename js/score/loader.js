@@ -187,9 +187,168 @@ async function unpackEntry(buffer, entry) {
   const start = entry.localOffset + 30 + filenameLength + extraLength;
   const packed = bytes.slice(start, start + entry.compressedSize);
   if (entry.compression === 0) return packed;
-  if (entry.compression === 8 && "DecompressionStream" in window) {
-    const stream = new Blob([packed]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+  if (entry.compression === 8) {
+    try {
+      if ("DecompressionStream" in window) {
+        const stream = new Blob([packed]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+    } catch {
+      // Fallback for Safari / environments without deflate-raw
+    }
+    return inflateRaw(packed);
   }
   throw new Error("This compressed score uses an unsupported compression method.");
+}
+
+function inflateRaw(input) {
+  let bitPos = 0;
+  const bits = (n) => {
+    let val = 0;
+    for (let i = 0; i < n; i++) {
+      const byteIdx = bitPos >> 3;
+      const bitIdx = bitPos & 7;
+      if (byteIdx < input.length) {
+        val |= ((input[byteIdx] >> bitIdx) & 1) << i;
+      }
+      bitPos++;
+    }
+    return val;
+  };
+
+  const buildTree = (lengths) => {
+    const maxLen = Math.max(...lengths, 0);
+    if (maxLen === 0) return null;
+    const count = new Uint16Array(maxLen + 1);
+    for (const len of lengths) if (len > 0) count[len]++;
+    const nextCode = new Uint16Array(maxLen + 1);
+    let code = 0;
+    for (let bitsLen = 1; bitsLen <= maxLen; bitsLen++) {
+      code = (code + count[bitsLen - 1]) << 1;
+      nextCode[bitsLen] = code;
+    }
+    const tree = {};
+    for (let symbol = 0; symbol < lengths.length; symbol++) {
+      const len = lengths[symbol];
+      if (len > 0) {
+        const c = nextCode[len]++;
+        let node = tree;
+        for (let i = len - 1; i >= 0; i--) {
+          const bit = (c >> i) & 1;
+          node = node[bit] = node[bit] || {};
+        }
+        node.symbol = symbol;
+      }
+    }
+    return tree;
+  };
+
+  const decodeSymbol = (tree) => {
+    let node = tree;
+    while (node && node.symbol === undefined) {
+      const bit = bits(1);
+      node = node[bit];
+    }
+    return node ? node.symbol : -1;
+  };
+
+  const LENGTH_CODES = [
+    3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
+    35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258
+  ];
+  const LENGTH_EXTRA_BITS = [
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
+    3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0
+  ];
+  const DIST_CODES = [
+    1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,
+    257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577
+  ];
+  const DIST_EXTRA_BITS = [
+    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6,
+    7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13
+  ];
+  const CL_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+
+  const fixedLitLengths = new Uint8Array(288);
+  for (let i = 0; i <= 143; i++) fixedLitLengths[i] = 8;
+  for (let i = 144; i <= 255; i++) fixedLitLengths[i] = 9;
+  for (let i = 256; i <= 279; i++) fixedLitLengths[i] = 7;
+  for (let i = 280; i <= 287; i++) fixedLitLengths[i] = 8;
+  const fixedLitTree = buildTree(fixedLitLengths);
+
+  const fixedDistLengths = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) fixedDistLengths[i] = 5;
+  const fixedDistTree = buildTree(fixedDistLengths);
+
+  const output = [];
+  let isFinal = 0;
+
+  while (!isFinal) {
+    isFinal = bits(1);
+    const blockType = bits(2);
+
+    if (blockType === 0) {
+      bitPos = (bitPos + 7) & ~7;
+      const len = input[bitPos >> 3] | (input[(bitPos >> 3) + 1] << 8);
+      bitPos += 32;
+      const byteStart = bitPos >> 3;
+      for (let i = 0; i < len; i++) output.push(input[byteStart + i]);
+      bitPos += len * 8;
+    } else if (blockType === 1 || blockType === 2) {
+      let litTree = fixedLitTree;
+      let distTree = fixedDistTree;
+
+      if (blockType === 2) {
+        const hlit = bits(5) + 257;
+        const hdist = bits(5) + 1;
+        const hclen = bits(4) + 4;
+
+        const clLengths = new Uint8Array(19);
+        for (let i = 0; i < hclen; i++) clLengths[CL_ORDER[i]] = bits(3);
+        const clTree = buildTree(clLengths);
+
+        const allLengths = [];
+        while (allLengths.length < hlit + hdist) {
+          const sym = decodeSymbol(clTree);
+          if (sym < 16) {
+            allLengths.push(sym);
+          } else if (sym === 16) {
+            const repeat = bits(2) + 3;
+            const prev = allLengths[allLengths.length - 1] || 0;
+            for (let i = 0; i < repeat; i++) allLengths.push(prev);
+          } else if (sym === 17) {
+            const repeat = bits(3) + 3;
+            for (let i = 0; i < repeat; i++) allLengths.push(0);
+          } else if (sym === 18) {
+            const repeat = bits(7) + 11;
+            for (let i = 0; i < repeat; i++) allLengths.push(0);
+          }
+        }
+        litTree = buildTree(allLengths.slice(0, hlit));
+        distTree = buildTree(allLengths.slice(hlit, hlit + hdist));
+      }
+
+      while (true) {
+        const sym = decodeSymbol(litTree);
+        if (sym === 256 || sym < 0) break;
+        if (sym < 256) {
+          output.push(sym);
+        } else {
+          const lenIdx = sym - 257;
+          const length = LENGTH_CODES[lenIdx] + (LENGTH_EXTRA_BITS[lenIdx] > 0 ? bits(LENGTH_EXTRA_BITS[lenIdx]) : 0);
+          const distSym = decodeSymbol(distTree);
+          const distance = DIST_CODES[distSym] + (DIST_EXTRA_BITS[distSym] > 0 ? bits(DIST_EXTRA_BITS[distSym]) : 0);
+
+          for (let i = 0; i < length; i++) {
+            output.push(output[output.length - distance]);
+          }
+        }
+      }
+    } else {
+      throw new Error("Invalid deflate block type.");
+    }
+  }
+
+  return new Uint8Array(output);
 }
