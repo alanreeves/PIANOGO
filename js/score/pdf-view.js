@@ -95,10 +95,13 @@ export class PdfView {
     this.currentSystem = null;
     this.lastClickX = null;
     this.onCalibrationChange = onUpdate;
-    this.pageViews.forEach(({ calibrationLayer }) => {
+    this.pageViews.forEach(({ calibrationLayer, container }) => {
       if (calibrationLayer) {
         calibrationLayer.style.pointerEvents = "auto";
         calibrationLayer.style.cursor = "crosshair";
+      }
+      if (container) {
+        container.style.cursor = "crosshair";
       }
     });
     this.renderBarOverlays();
@@ -108,10 +111,13 @@ export class PdfView {
     this.isCalibrating = false;
     this.currentSystem = null;
     this.lastClickX = null;
-    this.pageViews.forEach(({ calibrationLayer }) => {
+    this.pageViews.forEach(({ calibrationLayer, container }) => {
       if (calibrationLayer) {
         calibrationLayer.style.pointerEvents = "none";
         calibrationLayer.style.cursor = "default";
+      }
+      if (container) {
+        container.style.cursor = "default";
       }
     });
     this.renderBarOverlays();
@@ -149,14 +155,25 @@ export class PdfView {
   }
 
   #attachPageClickHandler(pageView) {
-    pageView.calibrationLayer.addEventListener("click", (event) => {
+    let lastHandledTime = 0;
+    const handleAction = (event) => {
       if (!this.isCalibrating) return;
+      if (event.button !== undefined && event.button !== 0) return;
+      const now = Date.now();
+      if (now - lastHandledTime < 150) return;
+      lastHandledTime = now;
+
       const rect = pageView.canvas.getBoundingClientRect();
       const clickX = (event.clientX - rect.left) / this.zoom;
       const clickY = (event.clientY - rect.top) / this.zoom;
 
       this.#handleCalibrationClick(pageView.pageNum, clickX, clickY);
-    });
+    };
+
+    pageView.calibrationLayer.addEventListener("pointerdown", handleAction);
+    pageView.calibrationLayer.addEventListener("click", handleAction);
+    pageView.canvas.addEventListener("pointerdown", handleAction);
+    pageView.container.addEventListener("pointerdown", handleAction);
   }
 
   #handleCalibrationClick(pageNum, x, y) {

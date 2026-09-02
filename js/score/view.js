@@ -188,8 +188,10 @@ export class ScoreView {
   #attachZoomGestures() {
     this.viewport.addEventListener("pointerdown", (event) => {
       this.pointers.set(event.pointerId, event);
-      this.viewport.setPointerCapture?.(event.pointerId);
-      if (this.pointers.size === 2) this.#beginGesture();
+      if (this.pointers.size === 2) {
+        this.viewport.setPointerCapture?.(event.pointerId);
+        this.#beginGesture();
+      }
     });
     this.viewport.addEventListener("pointermove", (event) => {
       if (!this.pointers.has(event.pointerId)) return;
