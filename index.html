@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f1d24">
   <meta name="description" content="Focused, progressive piano practice for small score ranges.">
-  <link rel="manifest" href="./manifest.webmanifest?v=0.3.0">
-  <link rel="icon" href="./assets/icon.svg?v=0.3.0" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.3.0">
-  <link rel="stylesheet" href="./styles.css?v=0.3.0">
+  <link rel="manifest" href="./manifest.webmanifest?v=0.3.1">
+  <link rel="icon" href="./assets/icon.svg?v=0.3.1" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.3.1">
+  <link rel="stylesheet" href="./styles.css?v=0.3.1">
   <title>PIANOGO</title>
 </head>
 <body>
@@ -35,7 +35,7 @@
       </div>
 
       <form id="practice-form" class="control-form">
-        <fieldset>
+        <fieldset class="compact-fieldset">
           <legend>Practice range</legend>
           <div class="field-row">
             <label>Start bar<input id="start-bar" name="startBar" type="number" min="1" value="1" disabled></label>
@@ -43,16 +43,26 @@
           </div>
         </fieldset>
 
-        <fieldset>
-          <legend>Tempo and repetitions</legend>
-          <div class="field-row">
+        <fieldset class="compact-fieldset">
+          <legend>Tempo & repetitions</legend>
+          <div class="field-row-3">
             <label>Start BPM<input id="start-tempo" name="startTempo" type="number" min="20" max="400" value="60"></label>
-            <label>Increase BPM<input id="tempo-increment" name="tempoIncrement" type="number" min="1" max="250" value="2"></label>
+            <label>+ BPM<input id="tempo-increment" name="tempoIncrement" type="number" min="1" max="250" value="2"></label>
+            <label>Reps<input id="repetitions" name="repetitions" type="number" min="1" max="999" value="8"></label>
           </div>
-          <label>Repetitions<input id="repetitions" name="repetitions" type="number" min="1" max="999" value="8"></label>
         </fieldset>
 
-        <fieldset>
+        <div class="session-readout" aria-live="polite">
+          <span id="session-bars">Bars —</span>
+          <strong id="session-tempo">Ready</strong>
+          <span id="session-repetition">—</span>
+        </div>
+        <div class="action-row">
+          <button class="primary-action" id="start-button" type="submit" disabled>Start practice</button>
+          <button class="secondary-action" id="stop-button" type="button" disabled>Stop</button>
+        </div>
+
+        <fieldset class="compact-fieldset">
           <legend>Playback</legend>
           <div class="field-row">
             <label>Hands
@@ -62,14 +72,13 @@
                 <option value="right">Right hand</option>
               </select>
             </label>
-            <label>Count-in signature<input id="count-in-signature" name="countInSignature" type="text" inputmode="text" pattern="(auto|[1-9][0-9]?/[1-9][0-9]?)" value="auto" aria-describedby="signature-help"></label>
+            <label>Count-in<input id="count-in-signature" name="countInSignature" type="text" inputmode="text" pattern="(auto|[1-9][0-9]?/[1-9][0-9]?)" value="auto" aria-describedby="signature-help"></label>
           </div>
-          <p class="helper" id="signature-help">Use auto or enter a value such as 4/4 or 6/8.</p>
+          <p class="helper" id="signature-help">Use auto or enter 4/4, 6/8, etc.</p>
           <label class="toggle"><input id="piano-sound" name="pianoSound" type="checkbox" checked><span>Play piano sound</span></label>
-          <p class="helper">Steinway samples: <a href="./assets/piano/LICENSE.txt">Salamander Grand Piano</a> by Alexander Holm, CC BY 3.0.</p>
         </fieldset>
 
-        <fieldset>
+        <fieldset class="compact-fieldset">
           <legend>Clef display</legend>
           <div class="clef-control-row">
             <div class="clef-group">
@@ -90,16 +99,6 @@
             </div>
           </div>
         </fieldset>
-
-        <div class="session-readout" aria-live="polite">
-          <span id="session-bars">Bars —</span>
-          <strong id="session-tempo">Ready</strong>
-          <span id="session-repetition">—</span>
-        </div>
-        <div class="action-row">
-          <button class="primary-action" id="start-button" type="submit" disabled>Start practice</button>
-          <button class="secondary-action" id="stop-button" type="button" disabled>Stop</button>
-        </div>
       </form>
 
       <section class="stats-card" aria-labelledby="stats-heading">
@@ -228,8 +227,8 @@
     </form>
   </dialog>
 
-  <script src="./vendor/pdf.min.js?v=0.3.0"></script>
-  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.3.0"></script>
-  <script type="module" src="./js/app.js?v=0.3.0"></script>
+  <script src="./vendor/pdf.min.js?v=0.3.1"></script>
+  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.3.1"></script>
+  <script type="module" src="./js/app.js?v=0.3.1"></script>
 </body>
 </html>

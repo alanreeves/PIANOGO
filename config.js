@@ -1,4 +1,4 @@
-export const APP_VERSION = "0.3.0";
+export const APP_VERSION = "0.3.1";
 
 export const DEFAULT_OMR_PROMPT = `You are an expert Optical Music Recognition (OMR) system and MusicXML transcriber.
 Analyze the provided sheet music image and generate a valid, complete, and syntactically correct MusicXML (version 3.1 partwise) score.
