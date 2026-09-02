@@ -1,12 +1,23 @@
 const XML_EXTENSIONS = new Set(["xml", "musicxml", "mxl"]);
-const decoder = new TextDecoder();
+
+export function decodeXmlBytes(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (u8.length >= 2 && u8[0] === 0xff && u8[1] === 0xfe) {
+    return new TextDecoder("utf-16le").decode(bytes).replace(/^\uFEFF/, "").trim();
+  }
+  if (u8.length >= 2 && u8[0] === 0xfe && u8[1] === 0xff) {
+    return new TextDecoder("utf-16be").decode(bytes).replace(/^\uFEFF/, "").trim();
+  }
+  const text = new TextDecoder("utf-8").decode(bytes);
+  return text.replace(/^\uFEFF/, "").trim();
+}
 
 export async function readScoreFile(file) {
   const extension = file.name.split(".").pop().toLowerCase();
   if (!XML_EXTENSIONS.has(extension)) throw new Error("Choose a .musicxml, .xml, or .mxl score file.");
   if (file.size > 20 * 1024 * 1024) throw new Error("Scores must be smaller than 20 MB.");
   const bytes = await file.arrayBuffer();
-  const xml = extension === "mxl" ? await readMxl(bytes) : decoder.decode(bytes);
+  const xml = extension === "mxl" ? await readMxl(bytes) : decodeXmlBytes(bytes);
   const document = parseXml(xml);
   const metadata = getMetadata(document, file.name);
   return {
@@ -18,8 +29,15 @@ export async function readScoreFile(file) {
 }
 
 export function parseXml(xml) {
-  const document = new DOMParser().parseFromString(xml, "application/xml");
-  if (document.querySelector("parsererror")) throw new Error("This file is not valid MusicXML.");
+  const clean = typeof xml === "string" ? xml.replace(/^\uFEFF/, "").trim() : xml;
+  const document = new DOMParser().parseFromString(clean, "application/xml");
+  if (document.querySelector("parsererror")) {
+    const fallback = new DOMParser().parseFromString(clean, "text/xml");
+    if (!fallback.querySelector("parsererror") && fallback.querySelector("score-partwise, score-timewise")) {
+      return fallback;
+    }
+    throw new Error("This file is not valid MusicXML.");
+  }
   if (!document.querySelector("score-partwise, score-timewise")) throw new Error("The uploaded XML is not a MusicXML score.");
   return document;
 }
@@ -117,13 +135,14 @@ async function readMxl(buffer) {
   const container = entries.get("META-INF/container.xml");
   let rootPath = "";
   if (container) {
-    const document = new DOMParser().parseFromString(decoder.decode(await unpackEntry(buffer, container)), "application/xml");
+    const containerText = decodeXmlBytes(await unpackEntry(buffer, container));
+    const document = new DOMParser().parseFromString(containerText, "application/xml");
     if (document.querySelector("parsererror")) throw new Error("This compressed score is malformed.");
     rootPath = document.querySelector("rootfile")?.getAttribute("full-path") || "";
   }
   const scoreEntry = entries.get(rootPath) || [...entries.values()].find((entry) => entry.name.endsWith(".xml") && !entry.name.startsWith("META-INF/"));
   if (!scoreEntry) throw new Error("This compressed MusicXML file has no score XML.");
-  return decoder.decode(await unpackEntry(buffer, scoreEntry));
+  return decodeXmlBytes(await unpackEntry(buffer, scoreEntry));
 }
 
 async function readZipEntries(buffer) {
@@ -133,6 +152,7 @@ async function readZipEntries(buffer) {
   const count = view.getUint16(end + 10, true);
   let offset = view.getUint32(end + 16, true);
   const entries = new Map();
+  const utf8 = new TextDecoder();
   for (let index = 0; index < count; index += 1) {
     if (view.getUint32(offset, true) !== 0x02014b50) throw new Error("This compressed score is malformed.");
     const flags = view.getUint16(offset + 8, true);
@@ -142,7 +162,7 @@ async function readZipEntries(buffer) {
     const extraLength = view.getUint16(offset + 30, true);
     const commentLength = view.getUint16(offset + 32, true);
     const localOffset = view.getUint32(offset + 42, true);
-    const name = decoder.decode(bytes.slice(offset + 46, offset + 46 + filenameLength));
+    const name = utf8.decode(bytes.slice(offset + 46, offset + 46 + filenameLength));
     if (flags & 1) throw new Error("Encrypted compressed scores are not supported.");
     entries.set(name, { name, compression, compressedSize, localOffset });
     offset += 46 + filenameLength + extraLength + commentLength;

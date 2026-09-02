@@ -1,3 +1,5 @@
+import { parseXml } from "./loader.js";
+
 export class ScoreView {
   constructor({ host, viewport, stage, playhead, emptyState }) {
     this.host = host;
@@ -31,8 +33,18 @@ export class ScoreView {
       this.visibleEnd = measureCount;
       this.zoom = 1;
     }
+    this.host.innerHTML = "";
+    this.host.style.cssText = "";
     this.host.style.transform = "";
-    await this.osmd.load(xml);
+
+    const cleanXml = typeof xml === "string" ? xml.replace(/^\uFEFF/, "").trim() : xml;
+    const document = typeof cleanXml === "string" ? parseXml(cleanXml) : cleanXml;
+
+    try {
+      await this.osmd.load(document);
+    } catch {
+      await this.osmd.load(cleanXml);
+    }
     this.osmd.zoom = this.zoom;
     this.osmd.render();
     this.emptyState.hidden = true;
