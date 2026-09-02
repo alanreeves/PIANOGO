@@ -5,8 +5,7 @@ export class PdfView {
     this.stage = stage;
     this.playhead = playhead;
     this.pdfDoc = null;
-    this.canvas = null;
-    this.calibrationLayer = null;
+    this.pageViews = [];
     this.zoom = 1;
     this.calibration = { bars: [], timeSignature: "4/4" };
     this.isCalibrating = false;
@@ -23,39 +22,67 @@ export class PdfView {
     const loadingTask = window.pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
     this.pdfDoc = await loadingTask.promise;
     this.calibration = calibration || { bars: [], timeSignature: "4/4" };
-    await this.renderPage(1);
+    await this.renderAllPages();
   }
 
-  async renderPage(pageNumber = 1) {
-    const page = await this.pdfDoc.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: this.scale });
-
+  async renderAllPages() {
     this.host.innerHTML = "";
     this.host.style.position = "relative";
-    this.host.style.display = "inline-block";
+    this.host.style.display = "flex";
+    this.host.style.flexDirection = "column";
+    this.host.style.alignItems = "center";
+    this.host.style.gap = "20px";
+    this.pageViews = [];
 
-    this.canvas = document.createElement("canvas");
-    this.canvas.width = Math.round(viewport.width);
-    this.canvas.height = Math.round(viewport.height);
-    this.canvas.style.width = `${Math.round(viewport.width / this.scale)}px`;
-    this.canvas.style.height = `${Math.round(viewport.height / this.scale)}px`;
-    this.canvas.style.display = "block";
-    this.canvas.style.background = "#fffdf8";
-    this.canvas.style.boxShadow = "0 8px 25px rgba(20, 40, 40, .12)";
+    const numPages = this.pdfDoc.numPages || 1;
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const page = await this.pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: this.scale });
 
-    const ctx = this.canvas.getContext("2d");
-    await page.render({ canvasContext: ctx, viewport }).promise;
+      const pageContainer = document.createElement("div");
+      pageContainer.className = "pdf-page-container";
+      pageContainer.dataset.page = String(pageNum);
+      pageContainer.style.position = "relative";
+      pageContainer.style.display = "inline-block";
 
-    this.calibrationLayer = document.createElement("div");
-    this.calibrationLayer.className = "pdf-calibration-layer";
-    this.calibrationLayer.style.position = "absolute";
-    this.calibrationLayer.style.inset = "0";
-    this.calibrationLayer.style.pointerEvents = this.isCalibrating ? "auto" : "none";
+      const canvas = document.createElement("canvas");
+      canvas.className = "pdf-page-canvas";
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      const baseW = Math.round(viewport.width / this.scale);
+      const baseH = Math.round(viewport.height / this.scale);
+      canvas.style.width = `${baseW}px`;
+      canvas.style.height = `${baseH}px`;
+      canvas.style.display = "block";
+      canvas.style.background = "#fffdf8";
+      canvas.style.boxShadow = "0 8px 25px rgba(20, 40, 40, .12)";
 
-    this.host.appendChild(this.canvas);
-    this.host.appendChild(this.calibrationLayer);
+      const ctx = canvas.getContext("2d");
+      await page.render({ canvasContext: ctx, viewport }).promise;
 
-    this.#attachClickHandlers();
+      const calibrationLayer = document.createElement("div");
+      calibrationLayer.className = "pdf-calibration-layer";
+      calibrationLayer.dataset.page = String(pageNum);
+      calibrationLayer.style.position = "absolute";
+      calibrationLayer.style.inset = "0";
+      calibrationLayer.style.pointerEvents = this.isCalibrating ? "auto" : "none";
+
+      pageContainer.appendChild(canvas);
+      pageContainer.appendChild(calibrationLayer);
+      this.host.appendChild(pageContainer);
+
+      const pageView = {
+        pageNum,
+        container: pageContainer,
+        canvas,
+        calibrationLayer,
+        baseW,
+        baseH,
+      };
+      this.pageViews.push(pageView);
+      this.#attachPageClickHandler(pageView);
+    }
+
     this.renderBarOverlays();
     this.applyZoom();
   }
@@ -65,10 +92,12 @@ export class PdfView {
     this.currentSystem = null;
     this.lastClickX = null;
     this.onCalibrationChange = onUpdate;
-    if (this.calibrationLayer) {
-      this.calibrationLayer.style.pointerEvents = "auto";
-      this.calibrationLayer.style.cursor = "crosshair";
-    }
+    this.pageViews.forEach(({ calibrationLayer }) => {
+      if (calibrationLayer) {
+        calibrationLayer.style.pointerEvents = "auto";
+        calibrationLayer.style.cursor = "crosshair";
+      }
+    });
     this.renderBarOverlays();
   }
 
@@ -76,10 +105,12 @@ export class PdfView {
     this.isCalibrating = false;
     this.currentSystem = null;
     this.lastClickX = null;
-    if (this.calibrationLayer) {
-      this.calibrationLayer.style.pointerEvents = "none";
-      this.calibrationLayer.style.cursor = "default";
-    }
+    this.pageViews.forEach(({ calibrationLayer }) => {
+      if (calibrationLayer) {
+        calibrationLayer.style.pointerEvents = "none";
+        calibrationLayer.style.cursor = "default";
+      }
+    });
     this.renderBarOverlays();
     return this.calibration;
   }
@@ -90,7 +121,7 @@ export class PdfView {
     const lastBar = this.calibration.bars.at(-1);
     if (lastBar) {
       this.lastClickX = lastBar.x2;
-      this.currentSystem = { top: lastBar.y1, bottom: lastBar.y2, index: lastBar.systemIndex };
+      this.currentSystem = { page: lastBar.page || 1, top: lastBar.y1, bottom: lastBar.y2, index: lastBar.systemIndex };
     } else {
       this.lastClickX = null;
       this.currentSystem = null;
@@ -107,32 +138,36 @@ export class PdfView {
     this.onCalibrationChange(this.calibration);
   }
 
-  #attachClickHandlers() {
-    this.calibrationLayer.addEventListener("click", (event) => {
+  #attachPageClickHandler(pageView) {
+    pageView.calibrationLayer.addEventListener("click", (event) => {
       if (!this.isCalibrating) return;
-      const rect = this.canvas.getBoundingClientRect();
+      const rect = pageView.canvas.getBoundingClientRect();
       const clickX = (event.clientX - rect.left) / this.zoom;
       const clickY = (event.clientY - rect.top) / this.zoom;
 
-      this.#handleCalibrationClick(clickX, clickY);
+      this.#handleCalibrationClick(pageView.pageNum, clickX, clickY);
     });
   }
 
-  #handleCalibrationClick(x, y) {
+  #handleCalibrationClick(pageNum, x, y) {
     const defaultStaffHeight = 70; // typical staff system pixel height
-    const systemYThreshold = 45; // If clicked vertically far from current line, new system
+    const systemYThreshold = 45; // If clicked vertically far or different page, new system
 
-    // If starting fresh or user clicked on a new staff line below
-    if (!this.currentSystem || Math.abs(y - (this.currentSystem.top + this.currentSystem.bottom) / 2) > systemYThreshold) {
-      // Start of a new system
+    // If starting fresh or user clicked on a different page or different staff line
+    if (
+      !this.currentSystem ||
+      this.currentSystem.page !== pageNum ||
+      Math.abs(y - (this.currentSystem.top + this.currentSystem.bottom) / 2) > systemYThreshold
+    ) {
       const systemIndex = (this.calibration.bars.at(-1)?.systemIndex ?? -1) + 1;
       this.currentSystem = {
+        page: pageNum,
         top: Math.max(0, y - defaultStaffHeight / 2),
         bottom: y + defaultStaffHeight / 2,
         index: systemIndex,
       };
       this.lastClickX = x;
-      this.renderBarOverlays(x, y);
+      this.renderBarOverlays(x, y, pageNum);
       return;
     }
 
@@ -142,7 +177,7 @@ export class PdfView {
     const barNumber = this.calibration.bars.length + 1;
     this.calibration.bars.push({
       barNumber,
-      page: 1,
+      page: pageNum,
       systemIndex: this.currentSystem.index,
       x1: Math.round(this.lastClickX),
       x2: Math.round(x),
@@ -155,13 +190,19 @@ export class PdfView {
     this.onCalibrationChange(this.calibration);
   }
 
-  renderBarOverlays(activeStartLineX = null, activeStartLineY = null) {
-    if (!this.calibrationLayer) return;
-    this.calibrationLayer.innerHTML = "";
+  renderBarOverlays(activeStartLineX = null, activeStartLineY = null, activePage = null) {
+    this.pageViews.forEach(({ calibrationLayer }) => {
+      if (calibrationLayer) calibrationLayer.innerHTML = "";
+    });
 
     this.calibration.bars.forEach((bar) => {
+      const pageNum = bar.page || 1;
+      const pageView = this.pageViews.find((pv) => pv.pageNum === pageNum) || this.pageViews[0];
+      if (!pageView || !pageView.calibrationLayer) return;
+
       const barEl = document.createElement("div");
       barEl.className = "pdf-bar-overlay";
+      barEl.dataset.bar = String(bar.barNumber);
       barEl.style.position = "absolute";
       barEl.style.left = `${bar.x1}px`;
       barEl.style.top = `${bar.y1}px`;
@@ -187,39 +228,46 @@ export class PdfView {
       badge.style.boxShadow = "0 1px 3px rgba(0,0,0,.2)";
 
       barEl.appendChild(badge);
-      this.calibrationLayer.appendChild(barEl);
+      pageView.calibrationLayer.appendChild(barEl);
     });
 
-    // If waiting for next barline in current system, show system start line
+    // If waiting for next barline in current system, show active line on that page
     if (this.isCalibrating && this.lastClickX !== null && this.currentSystem) {
-      const activeLine = document.createElement("div");
-      activeLine.className = "pdf-active-barline";
-      activeLine.style.position = "absolute";
-      activeLine.style.left = `${this.lastClickX}px`;
-      activeLine.style.top = `${this.currentSystem.top}px`;
-      activeLine.style.width = "2px";
-      activeLine.style.height = `${this.currentSystem.bottom - this.currentSystem.top}px`;
-      activeLine.style.background = "#e85436";
-      activeLine.style.boxShadow = "0 0 8px rgba(232, 84, 54, .8)";
-      activeLine.style.pointerEvents = "none";
-      this.calibrationLayer.appendChild(activeLine);
+      const activePageView = this.pageViews.find((pv) => pv.pageNum === this.currentSystem.page) || this.pageViews[0];
+      if (activePageView?.calibrationLayer) {
+        const activeLine = document.createElement("div");
+        activeLine.className = "pdf-active-barline";
+        activeLine.style.position = "absolute";
+        activeLine.style.left = `${this.lastClickX}px`;
+        activeLine.style.top = `${this.currentSystem.top}px`;
+        activeLine.style.width = "2px";
+        activeLine.style.height = `${this.currentSystem.bottom - this.currentSystem.top}px`;
+        activeLine.style.background = "#e85436";
+        activeLine.style.boxShadow = "0 0 8px rgba(232, 84, 54, .8)";
+        activeLine.style.pointerEvents = "none";
+        activePageView.calibrationLayer.appendChild(activeLine);
+      }
     }
   }
 
   showRange(startBar, endBar) {
-    if (!this.calibrationLayer) return;
-    const overlays = this.calibrationLayer.querySelectorAll(".pdf-bar-overlay");
-    overlays.forEach((el, index) => {
-      const barNum = index + 1;
-      const inRange = barNum >= startBar && barNum <= endBar;
-      el.style.background = inRange ? "rgba(232, 84, 54, .12)" : "rgba(16, 118, 110, .05)";
-      el.style.borderColor = inRange ? "#e85436" : "rgba(16, 118, 110, .4)";
+    this.pageViews.forEach(({ calibrationLayer }) => {
+      if (!calibrationLayer) return;
+      const overlays = calibrationLayer.querySelectorAll(".pdf-bar-overlay");
+      overlays.forEach((el) => {
+        const barNum = Number(el.dataset.bar);
+        const inRange = barNum >= startBar && barNum <= endBar;
+        el.style.background = inRange ? "rgba(232, 84, 54, .12)" : "rgba(16, 118, 110, .05)";
+        el.style.borderColor = inRange ? "#e85436" : "rgba(16, 118, 110, .4)";
+      });
     });
 
-    // Scroll first bar into view if outside
+    // Scroll first bar into view
     const firstBar = this.calibration.bars.find((b) => b.barNumber === startBar);
     if (firstBar && this.viewport) {
-      const targetY = firstBar.y1 * this.zoom - 40;
+      const pageView = this.pageViews.find((pv) => pv.pageNum === (firstBar.page || 1)) || this.pageViews[0];
+      const pageTop = pageView?.container?.offsetTop || 0;
+      const targetY = pageTop + (firstBar.y1 * this.zoom) - 40;
       this.viewport.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
     }
   }
@@ -232,9 +280,13 @@ export class PdfView {
     const barGeom = this.calibration.bars.find((b) => b.barNumber === currentMeasure.number);
     if (!barGeom) return;
 
+    const pageView = this.pageViews.find((pv) => pv.pageNum === (barGeom.page || 1)) || this.pageViews[0];
+    const pageLeft = pageView?.container?.offsetLeft || 0;
+    const pageTop = pageView?.container?.offsetTop || 0;
+
     const progress = Math.max(0, Math.min(1, (quarter - currentMeasure.start) / currentMeasure.duration));
-    const currentX = (barGeom.x1 + progress * (barGeom.x2 - barGeom.x1)) * this.zoom;
-    const currentY = barGeom.y1 * this.zoom;
+    const currentX = pageLeft + (barGeom.x1 + progress * (barGeom.x2 - barGeom.x1)) * this.zoom;
+    const currentY = pageTop + (barGeom.y1 * this.zoom);
     const height = (barGeom.y2 - barGeom.y1) * this.zoom;
 
     this.playhead.hidden = false;
@@ -255,46 +307,83 @@ export class PdfView {
   }
 
   applyZoom() {
-    if (!this.canvas) return;
-    const baseW = Math.round(this.canvas.width / this.scale);
-    const baseH = Math.round(this.canvas.height / this.scale);
-    this.host.style.width = `${Math.round(baseW * this.zoom)}px`;
-    this.host.style.height = `${Math.round(baseH * this.zoom)}px`;
-    this.host.style.transformOrigin = "top left";
-    this.canvas.style.width = `${Math.round(baseW * this.zoom)}px`;
-    this.canvas.style.height = `${Math.round(baseH * this.zoom)}px`;
+    this.pageViews.forEach((pageView) => {
+      const scaledW = Math.round(pageView.baseW * this.zoom);
+      const scaledH = Math.round(pageView.baseH * this.zoom);
+      pageView.container.style.width = `${scaledW}px`;
+      pageView.container.style.height = `${scaledH}px`;
+      pageView.container.style.transformOrigin = "top left";
+      pageView.canvas.style.width = `${scaledW}px`;
+      pageView.canvas.style.height = `${scaledH}px`;
 
-    if (this.calibrationLayer) {
-      this.calibrationLayer.style.transform = `scale(${this.zoom})`;
-      this.calibrationLayer.style.transformOrigin = "top left";
-      this.calibrationLayer.style.width = `${baseW}px`;
-      this.calibrationLayer.style.height = `${baseH}px`;
-    }
+      if (pageView.calibrationLayer) {
+        pageView.calibrationLayer.style.transform = `scale(${this.zoom})`;
+        pageView.calibrationLayer.style.transformOrigin = "top left";
+        pageView.calibrationLayer.style.width = `${pageView.baseW}px`;
+        pageView.calibrationLayer.style.height = `${pageView.baseH}px`;
+      }
+    });
   }
 
   getCropDataUrl(startBar, endBar) {
-    if (!this.canvas || !this.calibration.bars.length) return null;
+    if (!this.pageViews.length || !this.calibration.bars.length) return null;
     const selectedBars = this.calibration.bars.filter((b) => b.barNumber >= startBar && b.barNumber <= endBar);
     if (!selectedBars.length) return null;
 
-    const minX = Math.min(...selectedBars.map((b) => b.x1));
-    const maxX = Math.max(...selectedBars.map((b) => b.x2));
-    const minY = Math.min(...selectedBars.map((b) => b.y1));
-    const maxY = Math.max(...selectedBars.map((b) => b.y2));
+    // Group selected bars by page
+    const pageGroups = new Map();
+    selectedBars.forEach((bar) => {
+      const pageNum = bar.page || 1;
+      if (!pageGroups.has(pageNum)) pageGroups.set(pageNum, []);
+      pageGroups.get(pageNum).push(bar);
+    });
 
-    // Pad slightly
-    const pad = 10;
-    const cropX = Math.max(0, Math.round((minX - pad) * this.scale));
-    const cropY = Math.max(0, Math.round((minY - pad) * this.scale));
-    const cropW = Math.min(this.canvas.width - cropX, Math.round((maxX - minX + pad * 2) * this.scale));
-    const cropH = Math.min(this.canvas.height - cropY, Math.round((maxY - minY + pad * 2) * this.scale));
+    const pageSlices = [];
+    let totalHeight = 0;
+    let maxWidth = 0;
 
-    const cropCanvas = document.createElement("canvas");
-    cropCanvas.width = cropW;
-    cropCanvas.height = cropH;
-    const cropCtx = cropCanvas.getContext("2d");
-    cropCtx.drawImage(this.canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    for (const [pageNum, bars] of pageGroups.entries()) {
+      const pageView = this.pageViews.find((pv) => pv.pageNum === pageNum) || this.pageViews[0];
+      if (!pageView) continue;
 
-    return cropCanvas.toDataURL("image/jpeg", 0.92);
+      const minX = Math.min(...bars.map((b) => b.x1));
+      const maxX = Math.max(...bars.map((b) => b.x2));
+      const minY = Math.min(...bars.map((b) => b.y1));
+      const maxY = Math.max(...bars.map((b) => b.y2));
+
+      const pad = 10;
+      const cropX = Math.max(0, Math.round((minX - pad) * this.scale));
+      const cropY = Math.max(0, Math.round((minY - pad) * this.scale));
+      const cropW = Math.min(pageView.canvas.width - cropX, Math.round((maxX - minX + pad * 2) * this.scale));
+      const cropH = Math.min(pageView.canvas.height - cropY, Math.round((maxY - minY + pad * 2) * this.scale));
+
+      pageSlices.push({
+        canvas: pageView.canvas,
+        cropX,
+        cropY,
+        cropW,
+        cropH,
+      });
+
+      maxWidth = Math.max(maxWidth, cropW);
+      totalHeight += cropH;
+    }
+
+    if (!pageSlices.length || totalHeight === 0 || maxWidth === 0) return null;
+
+    const resultCanvas = document.createElement("canvas");
+    resultCanvas.width = maxWidth;
+    resultCanvas.height = totalHeight;
+    const resultCtx = resultCanvas.getContext("2d");
+    resultCtx.fillStyle = "#fff";
+    resultCtx.fillRect(0, 0, maxWidth, totalHeight);
+
+    let currentY = 0;
+    for (const slice of pageSlices) {
+      resultCtx.drawImage(slice.canvas, slice.cropX, slice.cropY, slice.cropW, slice.cropH, 0, currentY, slice.cropW, slice.cropH);
+      currentY += slice.cropH;
+    }
+
+    return resultCanvas.toDataURL("image/jpeg", 0.92);
   }
 }

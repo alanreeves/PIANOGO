@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f1d24">
   <meta name="description" content="Focused, progressive piano practice for small score ranges.">
-  <link rel="manifest" href="./manifest.webmanifest?v=0.4.0">
-  <link rel="icon" href="./assets/icon.svg?v=0.4.0" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.4.0">
-  <link rel="stylesheet" href="./styles.css?v=0.4.0">
+  <link rel="manifest" href="./manifest.webmanifest?v=0.5.0">
+  <link rel="icon" href="./assets/icon.svg?v=0.5.0" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icon.svg?v=0.5.0">
+  <link rel="stylesheet" href="./styles.css?v=0.5.0">
   <title>PIANOGO</title>
 </head>
 <body>
@@ -28,7 +28,7 @@
       <div class="upload-card">
         <label class="upload-label" for="score-file">
           <span>Upload a score</span>
-          <small>.musicxml, .xml, .mxl, or .pdf (AI conversion)</small>
+          <small>.musicxml, .xml, .mxl, or .pdf</small>
         </label>
         <input id="score-file" type="file" accept=".musicxml,.xml,.mxl,.pdf,application/pdf,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml">
         <p class="score-name" id="score-name">Choose a score to begin.</p>
@@ -41,6 +41,7 @@
             <label>Start bar<input id="start-bar" name="startBar" type="number" min="1" value="1" disabled></label>
             <label>End bar<input id="end-bar" name="endBar" type="number" min="1" value="1" disabled></label>
           </div>
+          <button type="button" class="chip-btn-wide" id="transcribe-range-btn" hidden>✨ Transcribe Bars (AI)</button>
         </fieldset>
 
         <fieldset class="compact-fieldset">
@@ -191,7 +192,7 @@
 
         <fieldset>
           <div class="legend-header">
-            <legend>AI OMR Transcription Prompt</legend>
+            <legend>AI Snippet Transcription Prompt</legend>
             <button type="button" class="text-link-btn" id="reset-prompt-btn">Reset to default</button>
           </div>
           <textarea id="setting-omr-prompt" rows="9" spellcheck="false"></textarea>
@@ -214,18 +215,6 @@
     </form>
   </dialog>
 
-  <dialog id="converted-dialog" class="converted-dialog" aria-labelledby="converted-title">
-    <div class="converted-content">
-      <p class="eyebrow">Conversion Successful</p>
-      <h2 id="converted-title">Score Converted to MusicXML</h2>
-      <p id="converted-summary">Your PDF sheet music has been transcribed and loaded into PIANOGO.</p>
-      <div class="action-row">
-        <button type="button" class="primary-action" id="download-converted-btn">Save .musicxml file</button>
-        <button type="button" class="secondary-action" id="close-converted-btn">Start practicing</button>
-      </div>
-    </div>
-  </dialog>
-
   <dialog id="clean-dialog" class="clean-dialog" aria-labelledby="clean-title">
     <form id="clean-form" method="dialog">
       <p class="eyebrow">Session complete</p>
@@ -239,8 +228,8 @@
     </form>
   </dialog>
 
-  <script src="./vendor/pdf.min.js?v=0.4.0"></script>
-  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.4.0"></script>
-  <script type="module" src="./js/app.js?v=0.4.0"></script>
+  <script src="./vendor/pdf.min.js?v=0.5.0"></script>
+  <script src="./vendor/opensheetmusicdisplay.min.js?v=0.5.0"></script>
+  <script type="module" src="./js/app.js?v=0.5.0"></script>
 </body>
 </html>

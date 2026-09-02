@@ -3,7 +3,7 @@ import { AudioEngine } from "./audio/engine.js";
 import { readScoreFile, parseXml, transformClefs } from "./score/loader.js";
 import { exportCalibrationFile, parseCalibrationJson } from "./score/pdf-calibration.js";
 import { PdfView } from "./score/pdf-view.js";
-import { convertPdfToMusicXml, downloadFile, transcribeSnippet } from "./score/omr.js";
+import { downloadFile, transcribeSnippet } from "./score/omr.js";
 import { buildPdfTimeline, buildTimeline, parseTimeSignature, selectRange } from "./score/timing.js";
 import { ScoreView } from "./score/view.js";
 import { PracticeRunner } from "./session/runner.js";
@@ -29,6 +29,7 @@ const elements = {
   calibImportBtn: document.querySelector("#calib-import-btn"),
   calibImportFile: document.querySelector("#calib-import-file"),
   calibDoneBtn: document.querySelector("#calib-done-btn"),
+  transcribeRangeBtn: document.querySelector("#transcribe-range-btn"),
   empty: document.querySelector("#score-empty"),
   form: document.querySelector("#practice-form"),
   startBar: document.querySelector("#start-bar"),
@@ -60,10 +61,6 @@ const elements = {
   exportSettingsBtn: document.querySelector("#export-settings-btn"),
   importSettingsBtn: document.querySelector("#import-settings-btn"),
   importSettingsFile: document.querySelector("#import-settings-file"),
-  convertedDialog: document.querySelector("#converted-dialog"),
-  convertedSummary: document.querySelector("#converted-summary"),
-  downloadConvertedBtn: document.querySelector("#download-converted-btn"),
-  closeConvertedBtn: document.querySelector("#close-converted-btn"),
 };
 
 const view = new ScoreView({
@@ -86,7 +83,6 @@ let currentScore = null;
 let currentTimeline = null;
 let activeScoreType = "xml"; // "xml" | "pdf"
 let pendingSession = null;
-let lastConvertedFile = null;
 let focusActive = false;
 let upperClef = "auto";
 let lowerClef = "auto";
@@ -250,6 +246,8 @@ async function openPdfScore(score, persist) {
 
   elements.scoreName.textContent = score.title;
   const barsCount = score.calibration?.bars?.length || 0;
+  const numPages = pdfView.pageViews?.length || 1;
+  const pageLabel = numPages === 1 ? "1 page" : `${numPages} pages`;
 
   if (barsCount > 0) {
     currentTimeline = buildPdfTimeline(score.calibration, elements.signature.value);
@@ -260,15 +258,17 @@ async function openPdfScore(score, persist) {
     elements.startBar.value = 1;
     elements.endBar.value = Math.min(barsCount, 4);
     elements.sessionBars.textContent = `Bars 1–${elements.endBar.value}`;
+    if (elements.transcribeRangeBtn) elements.transcribeRangeBtn.hidden = false;
     pdfView.showRange(1, elements.endBar.value);
     await refreshStats();
-    setIdleState(`${score.title} · ${barsCount} bars · ${currentTimeline.timeSignature}`);
+    setIdleState(`${score.title} · ${pageLabel} · ${barsCount} bars · ${currentTimeline.timeSignature}`);
   } else {
     currentTimeline = buildPdfTimeline({ bars: [] }, elements.signature.value);
     elements.startBar.disabled = true;
     elements.endBar.disabled = true;
     elements.start.disabled = true;
-    setStatus("PDF score loaded. Click '📐 Calibrate Bars' to mark the barlines line-by-line.");
+    if (elements.transcribeRangeBtn) elements.transcribeRangeBtn.hidden = true;
+    setStatus(`PDF loaded (${pageLabel}). Click '📐 Calibrate Bars' to mark barlines.`);
   }
 }
 
@@ -288,6 +288,7 @@ async function openScore(score, persist) {
   activeScoreType = "xml";
   elements.calibrateBtn.hidden = true;
   elements.calibrationToolbar.hidden = true;
+  if (elements.transcribeRangeBtn) elements.transcribeRangeBtn.hidden = true;
 
   const document = parseXml(score.xml);
   const timeline = buildTimeline(document);
@@ -316,6 +317,7 @@ function startCalibrationMode() {
   elements.calibrationToolbar.hidden = false;
   elements.calibrateBtn.hidden = true;
   elements.start.disabled = true;
+  if (elements.transcribeRangeBtn) elements.transcribeRangeBtn.hidden = true;
   elements.calibHint.textContent = `Click start of staff line, then click each barline (${pdfView.calibration.bars.length} bars marked)`;
 
   pdfView.startCalibration((updatedCalibration) => {
@@ -341,9 +343,11 @@ async function finishCalibrationMode() {
     elements.startBar.value = 1;
     elements.endBar.value = Math.min(barsCount, 4);
     elements.sessionBars.textContent = `Bars 1–${elements.endBar.value}`;
+    if (elements.transcribeRangeBtn) elements.transcribeRangeBtn.hidden = false;
     pdfView.showRange(1, elements.endBar.value);
     setIdleState(`Calibration saved! ${barsCount} bars ready to practise.`);
   } else {
+    if (elements.transcribeRangeBtn) elements.transcribeRangeBtn.hidden = true;
     setIdleState("No bars calibrated yet. Click '📐 Calibrate Bars' to mark measures.");
   }
 }
@@ -353,6 +357,37 @@ function rangeFromControls() {
   const endBar = Number(elements.endBar.value);
   if (startBar > endBar) throw new Error("The end bar must be the same as or after the start bar.");
   return selectRange(currentTimeline, startBar, endBar);
+}
+
+async function handleTranscribeRange() {
+  if (activeScoreType !== "pdf" || !currentScore || !currentTimeline) return;
+  const settings = readSettings();
+  if (!settings.openaiApiKey) {
+    throw new Error("Please enter your OpenAI API Key in Settings to transcribe audio for these bars.");
+  }
+  const startBar = Number(elements.startBar.value);
+  const endBar = Number(elements.endBar.value);
+  const cacheKey = `pianogo-snippet-${currentScore.id}-${startBar}-${endBar}`;
+  const snippetDataUrl = pdfView.getCropDataUrl(startBar, endBar);
+  if (!snippetDataUrl) throw new Error("Could not crop the selected bar range from the PDF.");
+
+  setStatus(`AI transcribing Bars ${startBar}–${endBar}…`);
+  if (elements.transcribeRangeBtn) elements.transcribeRangeBtn.disabled = true;
+  try {
+    const result = await transcribeSnippet({
+      snippetDataUrl,
+      startBar,
+      endBar,
+      timeSignature: currentTimeline.timeSignature,
+      settings,
+      onProgress: (msg) => setStatus(msg),
+    });
+    const snippetTimeline = buildTimeline(result.document);
+    localStorage.setItem(cacheKey, JSON.stringify(snippetTimeline.events));
+    setStatus(`Bars ${startBar}–${endBar} transcribed (${snippetTimeline.events.length} notes cached)! Ready to practice.`);
+  } finally {
+    if (elements.transcribeRangeBtn) elements.transcribeRangeBtn.disabled = false;
+  }
 }
 
 async function startPractice() {
@@ -544,14 +579,8 @@ elements.settingsForm.addEventListener("submit", () => {
   saveSettings();
 });
 
-elements.downloadConvertedBtn?.addEventListener("click", () => {
-  if (lastConvertedFile) {
-    downloadFile(lastConvertedFile.filename, lastConvertedFile.xml);
-  }
-});
-
-elements.closeConvertedBtn?.addEventListener("click", () => {
-  elements.convertedDialog.close();
+elements.transcribeRangeBtn?.addEventListener("click", () => {
+  handleTranscribeRange().catch(showError);
 });
 
 elements.file.addEventListener("change", async () => {
